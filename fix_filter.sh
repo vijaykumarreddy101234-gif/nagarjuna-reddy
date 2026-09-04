@@ -1,0 +1,1 @@
+sed -i "s/return modalBrandFilter === 'All' ? base : base.filter((p: any) => p.brand === modalBrandFilter || p.profileType === 'REINFORCEMENT' || \!p.brand || p.id === form.profileId);/return modalBrandFilter === 'All' ? base : base.filter((p: any) => p.brand === modalBrandFilter || p.id === form.profileId);/g" components/ProfileTransactions.tsx

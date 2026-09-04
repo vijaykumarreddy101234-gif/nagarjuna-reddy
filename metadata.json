@@ -1,0 +1,8 @@
+{
+  "name": "ERP ARJUN",
+  "description": "Advanced Quotation Builder, Data Plan Production Sheet, Protective Films & Sticker Inward/Outward Stock Tracking with automatic production deduction, and master inventory management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

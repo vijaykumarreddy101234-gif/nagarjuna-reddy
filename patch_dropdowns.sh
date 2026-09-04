@@ -1,0 +1,2 @@
+sed -i 's/{p.name} ({p.sku}){p.brand ? ` - ${p.brand}` : '"''"'}/{p.name} ({p.sku}){p.size ? ` [${p.size}]` : '"''"'}{p.color ? ` - ${p.color}` : '"''"'}{p.brand ? ` - ${p.brand}` : '"''"'}/g' components/ProfileTransactions.tsx
+sed -i 's/{p.name} ({p.sku}){p.brand ? ` - ${p.brand}` : '"''"'}/{p.name} ({p.sku}){p.size ? ` [${p.size}]` : '"''"'}{p.color ? ` - ${p.color}` : '"''"'}{p.brand ? ` - ${p.brand}` : '"''"'}/g' components/CreateQuotationModal.tsx

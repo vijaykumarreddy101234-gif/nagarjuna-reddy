@@ -1,0 +1,4 @@
+sed -i 's/initialBrand \}) => {/initialBrand, onAddNewProfile \}) => {/g' components/ProfileTransactions.tsx
+
+# Add the plus button next to Profile select
+sed -i 's|</select>|</select>\n                                {onAddNewProfile \&\& (\n                                    <button \n                                        type="button" \n                                        onClick={onAddNewProfile} \n                                        className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"\n                                        title="Add New Profile"\n                                    >\n                                        <Plus className="w-4 h-4" />\n                                    </button>\n                                )}|g' components/ProfileTransactions.tsx
