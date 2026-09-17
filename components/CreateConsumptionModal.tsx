@@ -13,7 +13,7 @@ interface CreateConsumptionModalProps {
 
 type ConsumptionMode = 'single' | 'formula';
 
-const CreateConsumptionModal: React.FC<CreateConsumptionModalProps> = ({ isOpen, onClose, items, formulas, onAdd, initialFormulaId }) => {
+const CreateConsumptionModal = ({ isOpen, onClose, items, formulas, onAdd, initialFormulaId }) => {
   const [mode, setMode] = useState<ConsumptionMode>('single');
   const [type, setType] = useState<'PROD' | 'SCRAP'>('PROD');
 

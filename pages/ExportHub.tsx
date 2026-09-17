@@ -39,7 +39,7 @@ interface ExportDataset {
     fileName: string;
 }
 
-const ExportHub: React.FC<ExportHubProps> = ({ addToast }) => {
+const ExportHub = ({ addToast }) => {
     const store = useStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategory, setActiveCategory] = useState<string>('All');

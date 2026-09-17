@@ -9,7 +9,7 @@ interface InventoryValueModalProps {
   stockLevels: Record<string, number>;
 }
 
-const InventoryValueModal: React.FC<InventoryValueModalProps> = ({ isOpen, onClose, items, stockLevels }) => {
+const InventoryValueModal = ({ isOpen, onClose, items, stockLevels }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {

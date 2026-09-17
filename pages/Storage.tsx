@@ -18,7 +18,7 @@ interface StorageProps {
     addToast?: (message: string, type?: ToastMessage['type']) => void;
 }
 
-const Storage: React.FC<StorageProps> = ({ addToast }) => {
+const Storage = ({ addToast }) => {
     const store = useStore();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isSavingDrive, setIsSavingDrive] = useState(false);

@@ -8,7 +8,7 @@ interface StockMovementTableProps {
     consumption: ConsumptionTransaction[];
 }
 
-const StockMovementTable: React.FC<StockMovementTableProps> = ({ items, inflow, consumption }) => {
+const StockMovementTable = ({ items, inflow, consumption }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const allMovements = useMemo(() => {
@@ -96,8 +96,8 @@ const StockMovementTable: React.FC<StockMovementTableProps> = ({ items, inflow, 
                                 <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-gray-400">No stock movements found.</td>
                             </tr>
                         ) : (
-                            filteredMovements.map(m => (
-                                <tr key={m.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+                            filteredMovements.map((m, index) => (
+                                <tr key={`${m.id || index}_${index}`} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                                     <td className="px-6 py-4 whitespace-nowrap">{new Date(m.date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getBadgeClass(m.type)}`}>

@@ -15,7 +15,7 @@ interface BrandStockOverviewProps {
     onBrandClick: (brand: string) => void;
 }
 
-export const BrandStockOverview: React.FC<BrandStockOverviewProps> = ({ brands, inward, outward, onBrandClick }) => {
+export const BrandStockOverview = ({ brands, inward, outward, onBrandClick }) => {
     const stats: Record<string, BrandStats> = brands.reduce((acc, brand) => {
         const brandStr = String(brand || '').toLowerCase();
         const brandIn = inward.filter(t => String(t.brand || '').toLowerCase() === brandStr).reduce((sum, t) => sum + (t.meters * (t.rollCount || 1)), 0);

@@ -12,7 +12,7 @@ interface BatchCalculatorProps {
     onForecastClick: (result: BatchForecastResult) => void;
 }
 
-const BatchCalculator: React.FC<BatchCalculatorProps> = ({ formulas, selectedFormulaId, onFormulaChange, calculationResult, onForecastClick }) => {
+const BatchCalculator = ({ formulas, selectedFormulaId, onFormulaChange, calculationResult, onForecastClick }) => {
     return (
         <Card>
             <div className="flex items-center mb-4">

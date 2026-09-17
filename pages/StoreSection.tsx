@@ -56,7 +56,7 @@ interface StoreSectionProps {
 
 type Tab = 'Stock' | 'Inflow' | 'Consumption' | 'Materials' | 'Forecasting' | 'Suppliers' | 'PurchaseOrders' | 'BatchCost';
 
-const StoreSection: React.FC<StoreSectionProps> = (props) => {
+const StoreSection = (props) => {
     const [activeTab, setActiveTab] = useState<Tab>(props.initialTab || 'Stock');
     const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
     const [isPOModalOpen, setIsPOModalOpen] = useState(false);
@@ -298,8 +298,8 @@ const StoreSection: React.FC<StoreSectionProps> = (props) => {
         <div className="space-y-10">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>
-                    <h1 className="text-4xl font-display font-black text-slate-900 dark:text-white uppercase tracking-tighter italic">Store Operations</h1>
-                    <p className="text-slate-500 font-medium mt-1">Raw material inventory intelligence, logistics tracking, and suppliers.</p>
+                    <h1 className="text-4xl font-display font-black text-slate-900 dark:text-white uppercase tracking-tighter italic">RM Section Operations</h1>
+                    <p className="text-slate-500 font-medium mt-1">Raw material inventory intelligence, logistics tracking, and RM suppliers.</p>
                 </div>
             </div>
 
@@ -336,6 +336,7 @@ const StoreSection: React.FC<StoreSectionProps> = (props) => {
                         deleteItem={props.deleteItem}
                         updateItem={props.updateItem}
                         totalBatches={props.totalBatches}
+                        addToast={props.addToast}
                     />
                 )}
                 {activeTab === 'Inflow' && (

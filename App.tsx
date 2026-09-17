@@ -43,7 +43,7 @@ import ExportHub from './pages/ExportHub';
 
 type NavTab = 
     | 'Dashboard' 
-    | 'Store Management' 
+    | 'RM Section' 
     | 'Profiles & Stock' 
     | 'Dies & Planning' 
     | 'Reports & History' 
@@ -55,7 +55,7 @@ type NavTab =
     | 'Import Excel' 
     | 'Settings';
 
-const App: React.FC = () => {
+const App = () => {
     const store = useStore();
     const [currentTab, setCurrentTab] = useState<NavTab>('Dashboard');
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -89,22 +89,35 @@ const App: React.FC = () => {
         setIsMobileNavOpen(false);
     };
 
-    // Calculate stock levels map
+    // Calculate stock levels map using optimized O(N+M) approach
     const stockLevels = useMemo(() => {
         const levels: Record<string, number> = {};
+        
+        // Group inward by itemId
+        const inwardByItem = new Map<string, number>();
+        store.inflowTransactions.forEach(tx => {
+            if (!tx.deletedAt && tx.itemId) {
+                inwardByItem.set(tx.itemId, (inwardByItem.get(tx.itemId) || 0) + (tx.quantity || 0));
+            }
+        });
+
+        // Group consumption by itemId
+        const consumptionByItem = new Map<string, number>();
+        store.consumptionTransactions.forEach(tx => {
+            if (!tx.deletedAt && tx.itemId) {
+                consumptionByItem.set(tx.itemId, (consumptionByItem.get(tx.itemId) || 0) + (tx.quantity || 0));
+            }
+        });
+
         store.items.forEach(item => {
-            const inward = store.inflowTransactions
-                .filter(tx => tx.itemId === item.id && !tx.deletedAt)
-                .reduce((sum, tx) => sum + tx.quantity, 0);
-            const consumption = store.consumptionTransactions
-                .filter(tx => tx.itemId === item.id && !tx.deletedAt)
-                .reduce((sum, tx) => sum + tx.quantity, 0);
+            const inward = inwardByItem.get(item.id) || 0;
+            const consumption = consumptionByItem.get(item.id) || 0;
             levels[item.id] = (item.openingStock || 0) + inward - consumption;
         });
         return levels;
     }, [store.items, store.inflowTransactions, store.consumptionTransactions]);
 
-    // Dashboard stats calculation
+    // Dashboard stats calculation optimized
     const dashboardStats = useMemo(() => {
         const activeItems = store.items.filter(i => !i.deletedAt);
         const totalItems = activeItems.length;
@@ -117,7 +130,7 @@ const App: React.FC = () => {
         // Inventory Value Distribution by Item
         const inventoryValueDistribution = activeItems
             .map(i => ({
-                name: i.name,
+                name: i.name || 'Unnamed Item',
                 value: (stockLevels[i.id] || 0) * (i.costPrice || 0)
             }))
             .filter(i => i.value > 0)
@@ -137,25 +150,28 @@ const App: React.FC = () => {
         // Monthly Operations Velocity
         const monthlyOperations: { [key: string]: { inflow: number; consumption: number } } = {};
         
-        store.inflowTransactions.filter(tx => !tx.deletedAt).forEach(tx => {
+        store.inflowTransactions.forEach(tx => {
+            if (tx.deletedAt) return;
             const dateStr = tx.txnDate || tx.createdAt;
             if (!dateStr) return;
             const monthKey = dateStr.slice(0, 7); // YYYY-MM
             if (!monthlyOperations[monthKey]) {
                 monthlyOperations[monthKey] = { inflow: 0, consumption: 0 };
             }
-            monthlyOperations[monthKey].inflow += tx.totalCost || (tx.quantity * (tx.unitCost || 0));
+            monthlyOperations[monthKey].inflow += tx.totalCost || ((tx.quantity || 0) * (tx.unitCost || 0));
         });
 
-        store.consumptionTransactions.filter(tx => !tx.deletedAt).forEach(tx => {
+        const itemsMap = new Map(store.items.map(i => [i.id, i]));
+        store.consumptionTransactions.forEach(tx => {
+            if (tx.deletedAt) return;
             const dateStr = tx.txnDate || tx.createdAt;
             if (!dateStr) return;
             const monthKey = dateStr.slice(0, 7); // YYYY-MM
             if (!monthlyOperations[monthKey]) {
                 monthlyOperations[monthKey] = { inflow: 0, consumption: 0 };
             }
-            const item = store.items.find(i => i.id === tx.itemId);
-            const cost = tx.quantity * (item?.costPrice || 50);
+            const item = itemsMap.get(tx.itemId);
+            const cost = (tx.quantity || 0) * (item?.costPrice || 50);
             monthlyOperations[monthKey].consumption += cost;
         });
 
@@ -166,8 +182,8 @@ const App: React.FC = () => {
             const suggestedReorder = Math.max(reorderPoint * 2 - currentStock, reorderPoint);
             return {
                 itemId: item.id,
-                name: item.name,
-                sku: item.sku,
+                name: item.name || 'Unnamed Item',
+                sku: item.sku || 'NO-SKU',
                 currentStock,
                 suggestedReorder,
                 uom: item.uom || 'kg',
@@ -202,7 +218,7 @@ const App: React.FC = () => {
 
     const navItems: { name: NavTab; roles: Role[]; icon: React.FC<{ className?: string }> }[] = [
         { name: 'Dashboard', roles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE', 'SALES', 'SECURITY', 'MANAGEMENT'], icon: LayoutDashboard },
-        { name: 'Store Management', roles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE'], icon: Boxes },
+        { name: 'RM Section', roles: ['ADMIN', 'STORE_MANAGER', 'PURCHASE'], icon: Boxes },
         { name: 'Profiles & Stock', roles: ['ADMIN', 'STORE_MANAGER', 'SALES'], icon: Layers },
         { name: 'Dies & Planning', roles: ['ADMIN', 'STORE_MANAGER', 'MANAGEMENT'], icon: Hammer },
         { name: 'Reports & History', roles: ['ADMIN', 'MANAGEMENT', 'STORE_MANAGER'], icon: HistoryIcon },
@@ -265,15 +281,15 @@ const App: React.FC = () => {
             return;
         }
 
-        // Handle navigation to RM Section / Store Management
-        if (p === 'RM Section' || p === 'Store Management' || p === 'Store') {
+        // Handle navigation to RM Section
+        if (p === 'RM Section' || p === 'Store' || p === 'Store Management') {
             if (initialTab) {
                 setStoreNavState({
                     tab: initialTab,
                     timestamp: Date.now()
                 });
             }
-            setCurrentTab('Store Management');
+            setCurrentTab('RM Section');
             setIsMobileNavOpen(false);
             return;
         }
@@ -318,7 +334,7 @@ const App: React.FC = () => {
                         {(!isDesktopCollapsed || isMobileNavOpen) && (
                             <div className="truncate">
                                 <h1 className="text-base font-black tracking-tight uppercase text-blue-400 truncate">uPVC ERP Hub</h1>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-widest truncate">Manufacturing & Store</p>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest truncate">Manufacturing & RM Section</p>
                             </div>
                         )}
                     </div>
@@ -498,7 +514,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {currentTab === 'Store Management' && (
+                    {currentTab === 'RM Section' && (
                         <StoreSection 
                             items={store.items}
                             stockLevels={stockLevels}

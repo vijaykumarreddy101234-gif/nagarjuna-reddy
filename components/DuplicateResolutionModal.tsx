@@ -25,7 +25,7 @@ interface DuplicateResolutionModalProps {
     onResolve: (resolutions: DuplicateConflictItem[]) => void;
 }
 
-export const DuplicateResolutionModal: React.FC<DuplicateResolutionModalProps> = ({
+export const DuplicateResolutionModal = ({
     isOpen,
     onClose,
     title = 'Duplicate Profiles Detected',
@@ -33,7 +33,7 @@ export const DuplicateResolutionModal: React.FC<DuplicateResolutionModalProps> =
     conflicts: initialConflicts,
     nonConflictsCount,
     onResolve
-}) => {
+}: DuplicateResolutionModalProps) => {
     const [conflicts, setConflicts] = useState<DuplicateConflictItem[]>(initialConflicts);
 
     useEffect(() => {

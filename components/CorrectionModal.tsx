@@ -11,7 +11,7 @@ interface CorrectionModalProps {
     onSave: (correction: Omit<ReportCorrection, 'updatedAt'>) => void;
 }
 
-const CorrectionModal: React.FC<CorrectionModalProps> = ({ isOpen, onClose, item, reportDate, calculatedData, existingCorrection, onSave }) => {
+const CorrectionModal = ({ isOpen, onClose, item, reportDate, calculatedData, existingCorrection, onSave }) => {
     const [actualInflow, setActualInflow] = useState('');
     const [actualConsumption, setActualConsumption] = useState('');
     const [reason, setReason] = useState('');

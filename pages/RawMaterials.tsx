@@ -16,7 +16,7 @@ interface RawMaterialsProps {
   addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const RawMaterials: React.FC<RawMaterialsProps> = ({ 
+const RawMaterials = ({ 
     items, deleteItem, updateItem, addItem, addToast
 }) => {
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);

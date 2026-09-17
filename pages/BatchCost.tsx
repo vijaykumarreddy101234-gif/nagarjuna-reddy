@@ -10,8 +10,8 @@ interface BatchCostProps {
     updateFormula: (formula: Formula) => void;
 }
 
-const BatchCost: React.FC<BatchCostProps> = ({ formulas, items, updateItem, updateFormula }) => {
-    const itemMap = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
+const BatchCost = ({ formulas, items, updateItem, updateFormula }) => {
+    const itemMap = useMemo(() => new Map<string, Item>(items.map(i => [i.id, i])), [items]);
 
     const handleRateChange = (formulaId: string, itemId: string, val: string) => {
         const newRate = parseFloat(val);

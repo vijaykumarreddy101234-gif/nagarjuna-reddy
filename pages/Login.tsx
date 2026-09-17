@@ -12,14 +12,14 @@ type ProviderType = 'google' | 'microsoft' | 'yahoo' | 'offline';
 
 const ROLES: { role: Role; label: string; desc: string; color: string }[] = [
     { role: 'ADMIN', label: 'System Administrator', desc: 'Full system management, user privileges & raw configuration', color: 'from-blue-600 to-indigo-600' },
-    { role: 'STORE_MANAGER', label: 'Store Manager', desc: 'Inflow, inventory stock control, material formulas & requisitions', color: 'from-emerald-600 to-teal-600' },
+    { role: 'STORE_MANAGER', label: 'RM Section Manager', desc: 'Inflow, inventory stock control, material formulas & requisitions', color: 'from-emerald-600 to-teal-600' },
     { role: 'PURCHASE', label: 'Purchase Manager', desc: 'Supplier POs, raw material procurement & stock replenishment', color: 'from-amber-600 to-orange-600' },
     { role: 'SALES', label: 'Sales Executive', desc: 'Profiles stock checks, client quotations & dispatch planning', color: 'from-purple-600 to-pink-600' },
     { role: 'SECURITY', label: 'Security Officer', desc: 'Gate entry verification, vehicle log tracking & material movement', color: 'from-cyan-600 to-blue-600' },
     { role: 'MANAGEMENT', label: 'Executive Management', desc: 'Audit reports, batch profitability & operational KPIs', color: 'from-violet-600 to-purple-600' },
 ];
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, offlinePendingCount = 0, lastSyncTime }) => {
+const LoginPage = ({ onLogin, offlinePendingCount = 0, lastSyncTime }) => {
     const [selectedProvider, setSelectedProvider] = useState<ProviderType | null>(null);
     const [selectedRole, setSelectedRole] = useState<Role>('ADMIN');
     const [customName, setCustomName] = useState('');
@@ -344,7 +344,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, offlinePendingCount = 0,
 
             {/* Footer */}
             <footer className="w-full max-w-6xl mx-auto py-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 relative z-10">
-                <p>© 2026 ERP ARJUN System. Enterprise uPVC Manufacturing & Store Management.</p>
+                <p>© 2026 ERP ARJUN System. Enterprise uPVC Manufacturing & RM Section.</p>
                 <div className="flex items-center gap-4 mt-2 sm:mt-0 font-semibold">
                     <span>Google Drive API v3</span>
                     <span>•</span>

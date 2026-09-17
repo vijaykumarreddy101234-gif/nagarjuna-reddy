@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import type { ToastMessage } from '../types';
 
 // Toast Component
-const Toast: React.FC<{ message: ToastMessage; onDismiss: (id: number) => void }> = ({ message, onDismiss }) => {
+const Toast = ({ message, onDismiss }: { message: ToastMessage; onDismiss: (id: number) => void }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onDismiss(message.id);
@@ -45,7 +45,7 @@ const Toast: React.FC<{ message: ToastMessage; onDismiss: (id: number) => void }
 };
 
 // Toast Container
-export const ToastContainer: React.FC<{ toasts: ToastMessage[]; dismissToast: (id: number) => void }> = ({ toasts, dismissToast }) => {
+export const ToastContainer = ({ toasts, dismissToast }: { toasts: ToastMessage[]; dismissToast: (id: number) => void }) => {
   return (
     <div className="fixed bottom-10 right-10 z-[100] w-full max-w-sm space-y-4 pointer-events-none">
       <div className="pointer-events-auto">
@@ -69,7 +69,7 @@ interface ConfirmModalProps {
   onCancel: () => void;
 }
 
-export const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, title, message, onConfirm, onCancel }) => {
+export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel }) => {
     return (
         <AnimatePresence>
             {isOpen && (

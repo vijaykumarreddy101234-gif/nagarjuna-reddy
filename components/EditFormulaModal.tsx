@@ -9,7 +9,7 @@ interface EditFormulaModalProps {
   onUpdate: (formula: Formula) => void;
 }
 
-const EditFormulaModal: React.FC<EditFormulaModalProps> = ({ isOpen, onClose, formula, items, onUpdate }) => {
+const EditFormulaModal = ({ isOpen, onClose, formula, items, onUpdate }) => {
     const [formData, setFormData] = useState({
         name: '',
         outputProduct: '',

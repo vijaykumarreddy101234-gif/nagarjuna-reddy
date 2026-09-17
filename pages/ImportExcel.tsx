@@ -38,7 +38,7 @@ const NORMALIZED_ALIASES = new Set(
     Object.values(ALL_HEADER_ALIASES).flat().map(alias => alias.replace(/[^a-z0-9]/g, ''))
 );
 
-const ImportExcel: React.FC<ImportExcelProps> = ({ addMultipleInflowTransactions, addToast }) => {
+const ImportExcel = ({ addMultipleInflowTransactions, addToast }) => {
     const [files, setFiles] = useState<File[]>([]);
     const [parsedData, setParsedData] = useState<any[]>([]);
     const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);

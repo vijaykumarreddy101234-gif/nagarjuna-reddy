@@ -28,7 +28,7 @@ const STANDARD_WIDTH_PRESETS = [
     '65', '70', '75', '80', '90', '100'
 ];
 
-export const ProtectiveFilms: React.FC<ProtectiveFilmsProps> = ({ defaultBrand = 'All', onOpenManageBrands }) => {
+export const ProtectiveFilms = ({ defaultBrand = 'All', onOpenManageBrands }) => {
     const {
         protectiveFilmItems = [],
         protectiveFilmInwardTransactions = [],

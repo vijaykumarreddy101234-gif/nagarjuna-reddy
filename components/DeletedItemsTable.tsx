@@ -8,7 +8,7 @@ interface DeletedItemsTableProps {
   permanentlyDeleteItem: (itemId: string) => void;
 }
 
-const DeletedItemsTable: React.FC<DeletedItemsTableProps> = ({ items, restoreItem, permanentlyDeleteItem }) => {
+const DeletedItemsTable = ({ items, restoreItem, permanentlyDeleteItem }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-md shadow">
       <div className="overflow-x-auto">

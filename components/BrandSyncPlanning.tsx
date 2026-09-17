@@ -30,7 +30,7 @@ interface BrandSyncPlanningProps {
     onExportStockToDataPlan?: (targetBrand?: string) => void;
 }
 
-export const BrandSyncPlanning: React.FC<BrandSyncPlanningProps> = ({
+export const BrandSyncPlanning = ({
     initialBrandFilter = 'All',
     onBrandFilterChange,
     addToast,

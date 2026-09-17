@@ -7,7 +7,7 @@ interface BatchForecastModalProps {
   calculationResult: BatchForecastResult | null;
 }
 
-const BatchForecastModal: React.FC<BatchForecastModalProps> = ({ isOpen, onClose, calculationResult }) => {
+const BatchForecastModal = ({ isOpen, onClose, calculationResult }) => {
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
           if (event.key === 'Escape') {

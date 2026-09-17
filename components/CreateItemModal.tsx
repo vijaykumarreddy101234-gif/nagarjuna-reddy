@@ -8,7 +8,7 @@ interface CreateItemModalProps {
   addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const CreateItemModal: React.FC<CreateItemModalProps> = ({ isOpen, onClose, onAdd, addToast }) => {
+const CreateItemModal = ({ isOpen, onClose, onAdd, addToast }) => {
   
   const getInitialState = () => ({
     sku: '',
@@ -17,6 +17,7 @@ const CreateItemModal: React.FC<CreateItemModalProps> = ({ isOpen, onClose, onAd
     uom: '',
     reorderPoint: '',
     costPrice: '',
+    openingStock: '',
   });
 
   const [formData, setFormData] = useState(getInitialState());
@@ -50,6 +51,7 @@ const CreateItemModal: React.FC<CreateItemModalProps> = ({ isOpen, onClose, onAd
     e.preventDefault();
     const reorderPoint = parseFloat(formData.reorderPoint);
     const costPrice = parseFloat(formData.costPrice);
+    const openingStock = parseFloat(formData.openingStock);
 
     if (!formData.sku || !formData.name || !formData.uom || isNaN(reorderPoint)) {
       addToast('Please fill in SKU, Name, UOM, and a valid Reorder Point.', 'error');
@@ -60,6 +62,7 @@ const CreateItemModal: React.FC<CreateItemModalProps> = ({ isOpen, onClose, onAd
         ...formData,
         reorderPoint,
         costPrice: isNaN(costPrice) ? undefined : costPrice,
+        openingStock: isNaN(openingStock) ? 0 : openingStock,
     });
     onClose();
   };
@@ -101,9 +104,15 @@ const CreateItemModal: React.FC<CreateItemModalProps> = ({ isOpen, onClose, onAd
                         <input type="number" id="reorderPoint" name="reorderPoint" value={formData.reorderPoint} onChange={handleChange} className={inputStyles} required min="0"/>
                     </div>
                 </div>
-                <div>
-                    <label htmlFor="costPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost Price</label>
-                    <input type="number" id="costPrice" name="costPrice" value={formData.costPrice} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="costPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost Price</label>
+                        <input type="number" id="costPrice" name="costPrice" value={formData.costPrice} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                    </div>
+                    <div>
+                        <label htmlFor="openingStock" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Opening Balance / Previous Month Stock</label>
+                        <input type="number" id="openingStock" name="openingStock" value={formData.openingStock} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                    </div>
                 </div>
             </div>
             <div className="mt-6 flex justify-end space-x-3">

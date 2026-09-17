@@ -35,7 +35,7 @@ interface TrashProps {
 
 type TrashTab = 'items' | 'transactions' | 'formulas' | 'profiles' | 'profile_logs' | 'dies' | 'plans';
 
-const Trash: React.FC<TrashProps> = (props) => {
+const Trash = (props) => {
     const [activeTab, setActiveTab] = useState<TrashTab>('items');
 
     const deletedItems = useMemo(() => props.items.filter(i => i.deletedAt), [props.items]);

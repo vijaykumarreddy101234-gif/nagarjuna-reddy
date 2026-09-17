@@ -30,7 +30,7 @@ interface DiesAndPlanningProps {
 
 type Tab = 'dies' | 'planning';
 
-const Portal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const Portal = ({ children }) => {
     return createPortal(children, document.body);
 };
 
@@ -48,7 +48,7 @@ interface TempInputProps {
     inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLTextAreaElement>>;
 }
 
-const TempInput: React.FC<TempInputProps> = React.memo(({ group, param, label, actValue, setValue, onChange, focusInput, inputRefs }) => (
+const TempInput = React.memo(({ group, param, label, actValue, setValue, onChange, focusInput, inputRefs }: TempInputProps) => (
     <tr className="border-b dark:border-gray-700">
         <td className="px-2 py-1 font-semibold cursor-pointer hover:text-blue-500" onClick={() => focusInput(`log-${group}-${param}-act`)}>{label}</td>
         <td className="p-1">
@@ -88,7 +88,7 @@ interface ParamInputProps {
     inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | HTMLTextAreaElement>>;
 }
 
-const ParamInput: React.FC<ParamInputProps> = React.memo(({ group, param, label, sNo, value, onChange, onHeaderChange, focusInput, inputRefs }) => (
+const ParamInput = React.memo(({ group, param, label, sNo, value, onChange, onHeaderChange, focusInput, inputRefs }: ParamInputProps) => (
     <tr className="border-b dark:border-gray-700">
         <td className="px-2 py-1 text-center font-semibold">{sNo}</td>
         <td className="px-2 py-1 font-semibold cursor-pointer hover:text-blue-500" onClick={() => focusInput(`log-${group || ''}-${param}`)}>{label}</td>
@@ -115,7 +115,7 @@ interface ProcessLogSheetModalProps {
     addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const ProcessLogSheetModal: React.FC<ProcessLogSheetModalProps> = ({ isOpen, onClose, die, onSave, addToast }) => {
+const ProcessLogSheetModal = ({ isOpen, onClose, die, onSave, addToast }) => {
     // IMPORTANT: Use deep copy to initialize state to prevent mutation of original die object before saving
     const [formData, setFormData] = useState<ProcessLogSheetData>({});
     const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement>>({});
@@ -494,8 +494,8 @@ const DiesAndPlanning: React.FC<DiesAndPlanningProps> = (props) => {
     const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
     const downloadMenuRef = useRef<HTMLDivElement>(null);
 
-    const dieMap = useMemo(() => new Map(dies.map(d => [d.id, d.dieNo])), [dies]);
-    const profileMap = useMemo(() => new Map(profiles.map(p => [p.id, p])), [profiles]);
+    const dieMap = useMemo(() => new Map<string, any>(dies.map(d => [d.id, d.dieNo])), [dies]);
+    const profileMap = useMemo(() => new Map<string, any>(profiles.map(p => [p.id, p])), [profiles]);
 
     const filteredDies = useMemo(() => {
         let filtered = dies;
@@ -1054,7 +1054,7 @@ const DiesAndPlanning: React.FC<DiesAndPlanningProps> = (props) => {
     );
 };
 
-const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, brands, onSave, addToast, addProfile }) => {
+const DieModal = ({ isOpen, onClose, die, profiles, brands, onSave, addToast, addProfile }) => {
     const [form, setForm] = useState({ dieNo: '', profileId: '', cavities: 1, expectedOutputKgHr: 100, lifespanMeters: 500000, status: 'ACTIVE' });
     const [modalBrandFilter, setModalBrandFilter] = useState('All');
     const [isAddProfileSubModalOpen, setIsAddProfileSubModalOpen] = useState(false); // State for sub-modal
@@ -1157,7 +1157,7 @@ const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, brands, onSav
     );
 };
 
-const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profiles, profileStockMap, onSave, addToast, brands, addDie, addProfile }) => {
+const ProductionPlanModal = ({ isOpen, onClose, plan, dies, profiles, profileStockMap, onSave, addToast, brands, addDie, addProfile }) => {
      const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], shift: 'A', machineNo: 'EXT-01', dieIds: [] as string[], targetLengths: 500 });
      const [modalBrandFilter, setModalBrandFilter] = useState('All');
      const [isAddingDie, setIsAddingDie] = useState(false);
@@ -1228,7 +1228,7 @@ const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profi
         if (e) e.preventDefault();
         if (!newProfileForm.name.trim()) return addToast('Please enter a Profile Name', 'error');
         const generatedSku = newProfileForm.sku.trim() || `PRF-${Date.now().toString().slice(-4)}`;
-        const targetBrand = newProfileForm.brand || newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'RAVIRAJA');
+        const targetBrand = newProfileForm.brand || newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'General');
 
         const newProfileData = {
             sku: generatedSku,
@@ -1265,7 +1265,7 @@ const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profi
         const createdDie = {
             id: newId,
             dieNo: newDieForm.dieNo.trim(),
-            brand: newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'RAVIRAJA'),
+            brand: newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'General'),
             profileId: newDieForm.profileId,
             cavities: Number(newDieForm.cavities) || 1,
             expectedOutputKgHr: Number(newDieForm.expectedOutputKgHr) || 0,
@@ -1334,7 +1334,7 @@ const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profi
                                     onClick={() => {
                                         setNewDieForm({
                                             dieNo: '',
-                                            brand: modalBrandFilter !== 'All' ? modalBrandFilter : (brands?.[0] || 'RAVIRAJA'),
+                                            brand: modalBrandFilter !== 'All' ? modalBrandFilter : (brands?.[0] || 'General'),
                                             profileId: profiles[0]?.id || '',
                                             cavities: 1,
                                             expectedOutputKgHr: 120,
@@ -1398,7 +1398,7 @@ const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profi
                                                 setNewProfileForm({
                                                     sku: '',
                                                     name: '',
-                                                    brand: newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'RAVIRAJA'),
+                                                    brand: newDieForm.brand || (modalBrandFilter !== 'All' ? modalBrandFilter : brands?.[0] || 'General'),
                                                     profileType: 'WINDOW',
                                                     uom: 'Pcs',
                                                     length: 5.9,
@@ -1548,7 +1548,7 @@ const ProductionPlanModal: React.FC<any> = ({ isOpen, onClose, plan, dies, profi
     );
 };
 
-const ManageBrandsModal: React.FC<any> = ({ isOpen, onClose, brands, addBrand, deleteBrand, addToast }) => {
+const ManageBrandsModal = ({ isOpen, onClose, brands, addBrand, deleteBrand, addToast }) => {
     const [newB, setNewB] = useState('');
     if (!isOpen) return null;
     const handleAdd = () => { if (newB.trim() && !brands.includes(newB.trim())) { addBrand(newB.trim()); setNewB(''); } else { addToast('Brand already exists or is empty.', 'error'); } };

@@ -39,8 +39,11 @@ import {
     Download,
     Printer,
     ArrowRight,
-    Shield
+    Shield,
+    Shuffle,
+    Upload
 } from 'lucide-react';
+import { ExcelImportBrandModal, ParsedImportRow } from '../components/ExcelImportBrandModal';
 import { 
     BarChart, 
     Bar, 
@@ -59,6 +62,7 @@ import {
     Legend
 } from 'recharts';
 import AddProfileModal from '../components/AddProfileModal';
+import { ProfileMasterSpreadsheetGrid } from '../components/ProfileMasterSpreadsheetGrid';
 import CustomerModal from '../components/CustomerModal';
 import Quotation from './Quotation';
 import CreateQuotationModal from '../components/CreateQuotationModal'; 
@@ -68,6 +72,8 @@ import { ProtectiveFilms } from '../components/ProtectiveFilms';
 import { BrandSyncPlanning } from '../components/BrandSyncPlanning';
 import { DuplicateResolutionModal, DuplicateConflictItem } from '../components/DuplicateResolutionModal';
 import { INITIAL_DATA_PLAN_COLUMNS, INITIAL_DATA_PLAN_ROWS } from '../data/defaultDataPlan';
+import Stock from './Stock';
+import { isReinforcementProfile } from '../utils';
 
 // Custom icons to match existing ones if needed, but using lucide-react now
 const SearchIcon = Search;
@@ -95,7 +101,7 @@ type Tab = 'Dashboard' | 'Stock' | 'Production' | 'Reinforcement Stock' | 'Reinf
 type ProductionSubTab = 'Inflow' | 'Outflow';
 type ProfileSubTab = 'Profiles' | 'Protective Films';
 
-const Portal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const Portal = ({ children }) => {
     return createPortal(children, document.body);
 };
 
@@ -135,16 +141,18 @@ function useFilteredTransactions(
 }
 
 // --- DASHBOARD LIST MODAL ---
-const DashboardListModal: React.FC<{ 
-    isOpen: boolean; 
-    onClose: () => void; 
-    items: any[]; 
-    title: string; 
-    type?: 'value' | 'lowstock' | 'list';
-    onAddProduction?: (profileId: string, brand?: string) => void;
-    onPlan?: (profileId: string) => void;
+interface DashboardListModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    items: any[];
+    title: string;
+    type?: 'list' | 'lowstock' | 'value';
+    onAddProduction: (profileId: string, brand: string | null) => void;
+    onPlan: (profileId: string) => void;
     brands?: string[];
-}> = ({ isOpen, onClose, items, title, type = 'list', onAddProduction, onPlan, brands = [] }) => {
+}
+
+const DashboardListModal = ({ isOpen, onClose, items, title, type = 'list', onAddProduction, onPlan, brands = [] }: DashboardListModalProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedBrand, setSelectedBrand] = useState('All');
     const [statusFilter, setStatusFilter] = useState<'All' | 'In Stock' | 'Low Stock' | 'Out of Stock'>('All');
@@ -235,7 +243,7 @@ const DashboardListModal: React.FC<{
 
     if (!isOpen) return null;
 
-    const availableBrands = ['All', ...Array.from(new Set(items.map(p => p.brand).filter(Boolean)))];
+    const availableBrands: string[] = ['All', ...Array.from(new Set(items.map((p: any) => p.brand).filter(Boolean)) as Set<string>)];
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[150] flex justify-center items-center p-4 animate-in fade-in duration-200" onClick={onClose}>
@@ -330,8 +338,8 @@ const DashboardListModal: React.FC<{
                                         {status}
                                     </button>
                                 ))}
-                            </>
-                        )}
+                                </>
+                    )}
 
                         {type === 'lowstock' && (
                             <>
@@ -376,6 +384,7 @@ const DashboardListModal: React.FC<{
                                 {type === 'list' && (
                                     <>
                                         <th className="px-3 py-3">Type</th>
+                                        <th className="px-3 py-3 text-right">Opening</th>
                                         <th className="px-3 py-3 text-right">Physical Stock</th>
                                         <th className="px-3 py-3 text-right">Reserved</th>
                                         <th className="px-3 py-3 text-right font-black text-blue-600">Available</th>
@@ -406,11 +415,11 @@ const DashboardListModal: React.FC<{
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {filteredItems.map(p => {
+                            {filteredItems.map((p, index) => {
                                 const valShare = totalInventoryValue > 0 ? ((p.calculatedValue / totalInventoryValue) * 100).toFixed(1) : '0.0';
                                 
                                 return (
-                                    <tr key={p.id} className="hover:bg-blue-50/40 dark:hover:bg-gray-800/60 transition-colors group">
+                                    <tr key={`${p.id || index}_${index}`} className="hover:bg-blue-50/40 dark:hover:bg-gray-800/60 transition-colors group">
                                         {/* SKU */}
                                         <td className="px-4 py-3 font-mono font-bold text-gray-900 dark:text-white">
                                             {p.sku}
@@ -440,6 +449,9 @@ const DashboardListModal: React.FC<{
                                                     }`}>
                                                         {p.profileType === 'REINFORCEMENT' ? 'Reinf' : 'Win'}
                                                     </span>
+                                                </td>
+                                                <td className="px-3 py-3 text-right font-mono font-bold text-gray-400">
+                                                    {p.openingStock || (p as any).initialStock || 0}
                                                 </td>
                                                 <td className="px-3 py-3 text-right font-mono font-medium text-gray-700 dark:text-gray-300">
                                                     {p.currentStock || 0}
@@ -620,18 +632,7 @@ const DashboardListModal: React.FC<{
 };
 
 // --- DASHBOARD COMPONENT ---
-const ProfileDashboard: React.FC<{
-    profiles: Profile[];
-    transactions: ProfileTransaction[];
-    allStockData: any[];
-    brands: string[];
-    onQuickAction?: (type: 'PRODUCTION' | 'DISPATCH' | 'QUOTATION' | 'DATA_PLAN') => void;
-    onNavigateTab?: (tab: Tab) => void;
-    onAddProductionForProfile?: (profileId: string, brand?: string) => void;
-    onPlanForProfile?: (profileId: string) => void;
-    dies?: any[];
-    productionPlans?: any[];
-}> = ({ 
+const ProfileDashboard = ({ 
     profiles, 
     transactions, 
     allStockData, 
@@ -652,14 +653,14 @@ const ProfileDashboard: React.FC<{
     const filteredStockData = useMemo(() => {
         const base = allStockData || [];
         if (dashboardBrand === 'All') return base;
-        return base.filter((p: any) => p.brand === dashboardBrand);
+        return base.filter((p) => p.brand === dashboardBrand);
     }, [allStockData, dashboardBrand]);
 
     const filteredTransactions = useMemo(() => {
         const base = transactions || [];
         if (dashboardBrand === 'All') return base;
-        return base.filter((t: any) => {
-            const profile = profiles.find((p: any) => p.id === t.profileId);
+        return base.filter((t) => {
+            const profile = profiles.find((p) => p.id === t.profileId);
             return (t.brand || profile?.brand) === dashboardBrand;
         });
     }, [transactions, dashboardBrand, profiles]);
@@ -673,7 +674,7 @@ const ProfileDashboard: React.FC<{
             });
         }
         
-        (allStockData || []).forEach((p: any) => {
+        (allStockData || []).forEach((p) => {
             const brand = p.brand || 'Unknown';
             if (!stats[brand]) stats[brand] = { qty: 0, value: 0, count: 0, packets: 0, weightKg: 0 };
             const available = (Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0);
@@ -701,12 +702,12 @@ const ProfileDashboard: React.FC<{
         }).reverse();
 
         return last7Days.map(date => {
-            const dayTxs = filteredTransactions.filter((t: any) => t.date && t.date.startsWith(date) && !t.deletedAt);
+            const dayTxs = filteredTransactions.filter((t) => t.date && t.date.startsWith(date) && !t.deletedAt);
             return {
                 date: new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-                production: dayTxs.filter((t: any) => t.type === 'PRODUCTION' || t.type === 'RETURN').reduce((s: number, t: any) => s + Number(t.quantity || 0), 0),
-                dispatch: dayTxs.filter((t: any) => t.type === 'DISPATCH').reduce((s: number, t: any) => s + Number(t.quantity || 0), 0),
-                scrap: dayTxs.filter((t: any) => t.type === 'SCRAP').reduce((s: number, t: any) => s + Number(t.quantity || 0), 0),
+                production: dayTxs.filter((t) => t.type === 'PRODUCTION' || t.type === 'RETURN').reduce((s, t) => s + Number(t.quantity || 0), 0),
+                dispatch: dayTxs.filter((t) => t.type === 'DISPATCH').reduce((s, t) => s + Number(t.quantity || 0), 0),
+                scrap: dayTxs.filter((t) => t.type === 'SCRAP').reduce((s, t) => s + Number(t.quantity || 0), 0),
             };
         });
     }, [filteredTransactions]);
@@ -716,21 +717,21 @@ const ProfileDashboard: React.FC<{
     // Metric Calculations
     const totalProfilesCount = useMemo(() => {
         if (dashboardBrand === 'All') return profiles.length;
-        return profiles.filter((p: any) => p.brand === dashboardBrand).length;
+        return profiles.filter((p) => p.brand === dashboardBrand).length;
     }, [profiles, dashboardBrand]);
 
     const windowProfilesCount = useMemo(() => {
-        const list = dashboardBrand === 'All' ? profiles : profiles.filter((p: any) => p.brand === dashboardBrand);
-        return list.filter((p: any) => p.profileType !== 'REINFORCEMENT').length;
+        const list = dashboardBrand === 'All' ? profiles : profiles.filter((p) => p.brand === dashboardBrand);
+        return list.filter((p) => p.profileType !== 'REINFORCEMENT').length;
     }, [profiles, dashboardBrand]);
 
     const reinforcementProfilesCount = useMemo(() => {
-        const list = dashboardBrand === 'All' ? profiles : profiles.filter((p: any) => p.brand === dashboardBrand);
-        return list.filter((p: any) => p.profileType === 'REINFORCEMENT').length;
+        const list = dashboardBrand === 'All' ? profiles : profiles.filter((p) => p.brand === dashboardBrand);
+        return list.filter((p) => p.profileType === 'REINFORCEMENT').length;
     }, [profiles, dashboardBrand]);
 
     const lowStockItems = useMemo(() => {
-        return filteredStockData.filter((p: any) => {
+        return filteredStockData.filter((p) => {
             const reorder = (p.reorderPoint !== undefined && p.reorderPoint !== null && p.reorderPoint > 0) ? p.reorderPoint : 50;
             const available = (Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0);
             return available < reorder;
@@ -738,22 +739,22 @@ const ProfileDashboard: React.FC<{
     }, [filteredStockData]);
 
     const criticalZeroStockCount = useMemo(() => {
-        return filteredStockData.filter((p: any) => {
+        return filteredStockData.filter((p) => {
             const available = (Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0);
             return available <= 0;
         }).length;
     }, [filteredStockData]);
 
     const totalValue = useMemo(() => {
-        return filteredStockData.reduce((sum: number, p: any) => sum + ((Number(p.currentStock) || 0) * (Number(p.price) || 0)), 0);
+        return filteredStockData.reduce((sum, p) => sum + ((Number(p.currentStock) || 0) * (Number(p.price) || 0)), 0);
     }, [filteredStockData]);
 
     const totalAvailable = useMemo(() => {
-        return filteredStockData.reduce((s: number, p: any) => s + ((Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0)), 0);
+        return filteredStockData.reduce((s, p) => s + ((Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0)), 0);
     }, [filteredStockData]);
 
     const totalPackets = useMemo(() => {
-        return filteredStockData.reduce((s: number, p: any) => {
+        return filteredStockData.reduce((s, p) => {
             const avail = (Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0);
             const pPerPkt = Number(p.piecesPerPacket) || 1;
             return s + (pPerPkt > 0 ? Math.floor(Math.max(0, avail) / pPerPkt) : 0);
@@ -761,7 +762,7 @@ const ProfileDashboard: React.FC<{
     }, [filteredStockData]);
 
     const totalWeightKg = useMemo(() => {
-        return filteredStockData.reduce((s: number, p: any) => {
+        return filteredStockData.reduce((s, p) => {
             const avail = (Number(p.currentStock) || 0) - (Number(p.reservedStock) || 0);
             const wt = Number(p.weight) || 0;
             return s + (Math.max(0, avail) * wt);
@@ -973,7 +974,7 @@ const ProfileDashboard: React.FC<{
                                         border: 'none', 
                                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.2)' 
                                     }}
-                                    formatter={(value: any, name: any) => [`${Number(value).toLocaleString()} Pcs`, name]}
+                                    formatter={(value, name) => [`${Number(value).toLocaleString()} Pcs`, name]}
                                 />
                                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
                             </PieChart>
@@ -1086,8 +1087,8 @@ const ProfileDashboard: React.FC<{
                         )}
                     </div>
                     <div className="space-y-3">
-                        {filteredTransactions.slice(0, 5).map((t: any) => {
-                            const profile = profiles.find((p: any) => p.id === t.profileId);
+                        {filteredTransactions.slice(0, 5).map((t) => {
+                            const profile = profiles.find((p) => p.id === t.profileId);
                             const isProd = t.type === 'PRODUCTION' || t.type === 'RETURN';
                             const isDisp = t.type === 'DISPATCH';
                             const isScrap = t.type === 'SCRAP';
@@ -1183,13 +1184,14 @@ const ProfileDashboard: React.FC<{
 };
 
 // --- MAIN PROFILE SECTION ---
-const ProfileSection: React.FC<ProfileSectionProps> = ({ 
-    addToast, 
-    initialTab,
-    initialSubTab,
-    initialAction,
-    onResetInitialAction
-}) => {
+function ProfileSection(props: ProfileSectionProps) {
+    const { 
+        addToast, 
+        initialTab,
+        initialSubTab,
+        initialAction,
+        onResetInitialAction
+    } = props;
     const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'Profiles');
     const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>(
         (initialSubTab as ProfileSubTab) || 'Profiles'
@@ -1198,22 +1200,49 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         (initialSubTab as ProductionSubTab) || 'Inflow'
     );
     const [stockSubTab, setStockSubTab] = useState<'Current Stock' | 'Stock Movement'>('Current Stock');
+    const [stockSegment, setStockSegment] = useState<'profiles' | 'raw'>('profiles');
     const [transactionFilterType, setTransactionFilterType] = useState<'WINDOW' | 'REINFORCEMENT' | null>(null);
     const syncProfilesToStock = useStore(state => state.syncProfilesToStock);
     const savedFilters = useStore(state => state.uiState.profileFilters);
     const setSavedFilters = useStore(state => state.setProfileFilters);
     const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm || '');
     const [brandFilter, setBrandFilter] = useState(savedFilters.brand || 'All');
-    const [typeFilter, setTypeFilter] = useState<'All' | 'WINDOW' | 'REINFORCEMENT'>('All');
+    const [typeFilter, setTypeFilter] = useState<'All' | 'WINDOW' | 'REINFORCEMENT'>('WINDOW');
     
+
+
     useEffect(() => { setSavedFilters({ searchTerm, brand: brandFilter }); }, [searchTerm, brandFilter, setSavedFilters]);
 
-    // Keep activeTab in sync with external navigation state
+    // Keep activeTab in sync with external navigation state and seamlessly redirect legacy Reinforcement tabs
     useEffect(() => {
         if (initialTab) {
-            setActiveTab(initialTab);
+            if ((initialTab as string) === 'Reinforcement Stock') {
+                setActiveTab('Stock');
+                setTypeFilter('REINFORCEMENT');
+            } else if ((initialTab as string) === 'Reinforcement Inflow') {
+                setActiveTab('Production');
+                setTypeFilter('REINFORCEMENT');
+            } else if ((initialTab as string) === 'Protective Films') {
+                setActiveTab('Profiles');
+                setProfileSubTab('Protective Films');
+            } else {
+                setActiveTab(initialTab);
+            }
         }
     }, [initialTab]);
+
+    useEffect(() => {
+        if ((activeTab as string) === 'Reinforcement Stock') {
+            setActiveTab('Stock');
+            setTypeFilter('REINFORCEMENT');
+        } else if ((activeTab as string) === 'Reinforcement Inflow') {
+            setActiveTab('Production');
+            setTypeFilter('REINFORCEMENT');
+        } else if ((activeTab as string) === 'Protective Films') {
+            setActiveTab('Profiles');
+            setProfileSubTab('Protective Films');
+        }
+    }, [activeTab]);
 
     // Keep subTabs in sync with external navigation state
     useEffect(() => {
@@ -1228,6 +1257,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+    const [profileCatalogueViewMode, setProfileCatalogueViewMode] = useState<'excel' | 'classic'>('excel');
     const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
     const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -1283,6 +1313,180 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
     const [duplicateCallback, setDuplicateCallback] = useState<((resolutions: DuplicateConflictItem[]) => void) | null>(null);
     const pdfFileInputRef = useRef<HTMLInputElement>(null);
     const excelFileInputRef = useRef<HTMLInputElement>(null);
+
+    // Excel Import with Brand Selection
+    const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
+    const [excelImportPreselectedType, setExcelImportPreselectedType] = useState<'WINDOW' | 'REINFORCEMENT' | 'AUTO'>('WINDOW');
+    const [excelImportPreselectedBrand, setExcelImportPreselectedBrand] = useState<string>('All');
+
+    const handleOpenExcelImportModal = (type: 'WINDOW' | 'REINFORCEMENT' | 'AUTO' = 'WINDOW', brand?: string) => {
+        setExcelImportPreselectedType(type);
+        const fallbackBrand = type === 'REINFORCEMENT' && brands.includes('Reinforcement')
+            ? 'Reinforcement'
+            : (brandFilter !== 'All' ? brandFilter : (brands[0] || 'General'));
+        setExcelImportPreselectedBrand(brand || fallbackBrand);
+        setIsExcelImportModalOpen(true);
+    };
+
+    const handleConfirmExcelImport = ({
+        rows,
+        targetBrand,
+        isNewBrand,
+        conflictStrategy,
+        syncToAllBrands = false,
+    }: {
+        rows: ParsedImportRow[];
+        targetBrand: string;
+        isNewBrand: boolean;
+        conflictStrategy: 'ASK' | 'REPLACE' | 'SKIP';
+        syncToAllBrands?: boolean;
+    }) => {
+        if (isNewBrand && targetBrand && targetBrand !== 'All' && !brands.includes(targetBrand)) {
+            addBrand(targetBrand);
+        }
+
+        const conflicts: DuplicateConflictItem[] = [];
+        const nonConflicts: any[] = [];
+
+        rows.forEach((item, idx) => {
+            if (item.isMerged) {
+                nonConflicts.push(item);
+                return;
+            }
+
+            const isReinfItem = item.profileType === 'REINFORCEMENT';
+            const existing = profiles.find(p => 
+                !p.deletedAt &&
+                !p.isMerged &&
+                p.sku.toLowerCase() === item.sku.toLowerCase() &&
+                (
+                    (p.brand || 'General').toLowerCase() === (item.brand || 'General').toLowerCase() ||
+                    (isReinfItem && isReinforcementProfile(p))
+                )
+            );
+
+            if (existing) {
+                conflicts.push({
+                    id: `conflict_excel_${idx}_${Date.now()}`,
+                    sku: item.sku,
+                    brand: item.brand,
+                    name: item.name,
+                    existing,
+                    incoming: item,
+                    action: conflictStrategy === 'REPLACE' ? 'REPLACE' : (conflictStrategy === 'SKIP' ? 'SKIP' : 'REPLACE'),
+                    customSku: `${item.sku}-V2`
+                });
+            } else {
+                nonConflicts.push(item);
+            }
+        });
+
+        const executeImport = (resolutions: DuplicateConflictItem[]) => {
+            let replacedCount = 0;
+            let skippedCount = 0;
+            let addedAsNewCount = 0;
+
+            resolutions.forEach(res => {
+                if (res.action === 'REPLACE') {
+                    if (res.existing && res.existing.id) {
+                        updateProfile({
+                            ...(res.existing as Profile),
+                            name: res.incoming.name || res.existing.name || '',
+                            length: res.incoming.length !== undefined ? res.incoming.length : res.existing.length,
+                            weight: res.incoming.weight !== undefined ? res.incoming.weight : res.existing.weight,
+                            meterWeight: res.incoming.meterWeight !== undefined ? res.incoming.meterWeight : (res.existing as any).meterWeight,
+                            piecesPerPacket: res.incoming.piecesPerPacket !== undefined ? res.incoming.piecesPerPacket : res.existing.piecesPerPacket,
+                            price: res.incoming.price !== undefined ? res.incoming.price : res.existing.price,
+                            profileType: res.incoming.profileType || res.existing.profileType || (excelImportPreselectedType === 'REINFORCEMENT' ? 'REINFORCEMENT' : 'WINDOW'),
+                            category: res.incoming.category || res.existing.category || (excelImportPreselectedType === 'REINFORCEMENT' ? 'GI Reinforcement' : 'Profile'),
+                            brand: res.incoming.brand || res.existing.brand,
+                            uom: res.incoming.uom || res.existing.uom || 'Pcs',
+                            hsnCode: res.incoming.hsnCode || res.existing.hsnCode || (res.incoming.profileType === 'REINFORCEMENT' ? '72169910' : '39162099'),
+                            topFilmWidth: res.incoming.topFilmWidth || (res.existing as any).topFilmWidth,
+                            bottomFilmWidth: res.incoming.bottomFilmWidth || (res.existing as any).bottomFilmWidth,
+                            topStickerName: res.incoming.topStickerName || (res.existing as any).topStickerName,
+                            bottomStickerName: res.incoming.bottomStickerName || (res.existing as any).bottomStickerName,
+                        });
+
+                        if (Number(res.incoming.openingStock) > 0) {
+                            // Only add initialization transaction if it doesn't already have one with this ref
+                            const hasInit = profileTransactions.some(t => 
+                                t.profileId === res.existing?.id && 
+                                (t.refNo === `INIT-${res.existing?.sku}` || t.notes?.toLowerCase().includes('initial'))
+                            );
+                            
+                            if (!hasInit) {
+                                addProfileTransaction({
+                                    profileId: res.existing.id,
+                                    brand: res.existing.brand || res.incoming.brand || 'General',
+                                    type: 'PRODUCTION',
+                                    quantity: Number(res.incoming.openingStock),
+                                    piecesPerPacket: res.incoming.piecesPerPacket || res.existing.piecesPerPacket || 1,
+                                    weight: res.incoming.weight || res.existing.weight || 0,
+                                    unitPrice: res.incoming.price || res.existing.price || 0,
+                                    date: new Date().toISOString(),
+                                    status: 'COMPLETED',
+                                    refNo: `INIT-${res.existing.sku}`,
+                                    notes: 'Replaced profile opening stock sync',
+                                });
+                            }
+                        }
+                        replacedCount++;
+                    }
+                } else if (res.action === 'ADD_AS_NEW') {
+                    addProfile({
+                        name: res.incoming.name || res.name || res.sku,
+                        category: res.incoming.category || (res.incoming.profileType === 'REINFORCEMENT' ? 'GI Reinforcement' : 'Profile'),
+                        profileType: res.incoming.profileType || (excelImportPreselectedType === 'REINFORCEMENT' ? 'REINFORCEMENT' : 'WINDOW'),
+                        uom: res.incoming.uom || 'Pcs',
+                        length: Number(res.incoming.length) || (res.incoming.profileType === 'REINFORCEMENT' ? 0 : 5.9),
+                        weight: Number(res.incoming.weight) || 0,
+                        meterWeight: res.incoming.meterWeight,
+                        piecesPerPacket: Number(res.incoming.piecesPerPacket) || (res.incoming.profileType === 'REINFORCEMENT' ? 1 : 6),
+                        price: Number(res.incoming.price) || (res.incoming.profileType === 'REINFORCEMENT' ? 95 : 150),
+                        hsnCode: res.incoming.hsnCode || (res.incoming.profileType === 'REINFORCEMENT' ? '72169910' : '39162099'),
+                        ...res.incoming,
+                        sku: res.customSku || `${res.sku}-V2`,
+                        brand: res.brand || res.incoming.brand || 'General',
+                    });
+                    addedAsNewCount++;
+                } else {
+                    skippedCount++;
+                }
+            });
+
+            if (nonConflicts.length > 0) {
+                addProfiles(nonConflicts);
+            }
+
+            syncProfilesToStock();
+
+            if (syncToAllBrands || targetBrand === 'All') {
+                pushStandardCatalogueToAll();
+                syncBrandDataToAllTabs();
+            }
+
+            if (excelImportPreselectedType === 'REINFORCEMENT' || rows.some(r => r.profileType === 'REINFORCEMENT')) {
+                setTypeFilter('REINFORCEMENT');
+            } else if (targetBrand && targetBrand !== 'All') {
+                setBrandFilter(targetBrand);
+            }
+
+            addToast(
+                `Catalogue import complete: ${nonConflicts.length} new placed, ${replacedCount} replaced, ${skippedCount} skipped! Automatically saved and synchronized across all tabs and brands.`, 
+                'success'
+            );
+        };
+
+        if (conflictStrategy === 'ASK' && conflicts.length > 0) {
+            setDuplicateConflicts(conflicts);
+            setDuplicateNonConflicts(nonConflicts);
+            setDuplicateCallback(() => executeImport);
+            setIsDuplicateModalOpen(true);
+        } else {
+            executeImport(conflicts);
+        }
+    };
 
     const [isDownloadStockMenuOpen, setIsDownloadStockMenuOpen] = useState(false);
     const [isDownloadProfileMenuOpen, setIsDownloadProfileMenuOpen] = useState(false);
@@ -1449,17 +1653,42 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
     const handleExportProfilesExcel = () => {
         try {
-            const headers = ['SKU', 'Profile Name', 'Brand', 'Category', 'Standard Length (m)', 'Weight (kg/m)', 'Pcs/Packet', 'Status'];
+            const headers = ['SKU', 'Profile Name', 'Brand', 'Category', 'Profile Type', 'Standard Length (m)', 'Weight (kg/m)', 'Pcs/Packet', 'Top Film Width (mm)', 'Bottom Film Width (mm)', 'Status'];
             const rows = filteredProfiles.map(p => [
                 p.sku || 'N/A',
                 p.name || 'N/A',
                 p.brand || 'General',
                 p.category || 'N/A',
+                p.profileType || 'WINDOW',
                 p.length || 0,
                 p.weight || 0,
                 p.piecesPerPacket || 4,
+                p.topFilmWidth || 38,
+                p.bottomFilmWidth || 38,
                 'Active'
             ]);
+
+            // Guarantee universal reinforcements are never missing from the Excel catalogue
+            const hasReinf = filteredProfiles.some(p => isReinforcementProfile(p));
+            const allReinfs = profiles.filter(p => !p.deletedAt && !p.isMerged && isReinforcementProfile(p));
+            if (!hasReinf && allReinfs.length > 0) {
+                rows.push(['--- REINFORCEMENTS (STANDARD CATALOGUE SIZES FOR ALL BRANDS) ---', '', '', '', '', '', '', '', '', '', '']);
+                allReinfs.forEach(p => {
+                    rows.push([
+                        p.sku || 'N/A',
+                        p.name || 'N/A',
+                        p.brand || 'Reinforcement',
+                        p.category || 'Reinforcement',
+                        'REINFORCEMENT',
+                        p.length || 0,
+                        p.weight || 0,
+                        p.piecesPerPacket || 1,
+                        p.topFilmWidth || '',
+                        p.bottomFilmWidth || '',
+                        'Active'
+                    ]);
+                });
+            }
 
             if (rows.length === 0) {
                 addToast('No records available to export.', 'error');
@@ -1468,11 +1697,26 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-            XLSX.utils.book_append_sheet(wb, ws, 'Profiles Catalog');
+            XLSX.utils.book_append_sheet(wb, ws, 'Profiles & Reinforcements');
+
+            // Sheet 2: Dedicated Reinforcements Sheet
+            if (allReinfs.length > 0) {
+                const reinfHeaders = ['SKU', 'Reinforcement Profile', 'Brand', 'Standard Length (m)', 'Weight (kg/m)', 'Pieces / Packet'];
+                const reinfRows = allReinfs.map(p => [
+                    p.sku || '',
+                    p.name || '',
+                    p.brand || 'Reinforcement',
+                    p.length || 0,
+                    p.weight || 0,
+                    p.piecesPerPacket || 1
+                ]);
+                const reinfWs = XLSX.utils.aoa_to_sheet([reinfHeaders, ...reinfRows]);
+                XLSX.utils.book_append_sheet(wb, reinfWs, 'Reinforcements (Universal)');
+            }
             
             const dateStr = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(wb, `Profiles_Catalog_${dateStr}.xlsx`);
-            addToast('Successfully downloaded Profiles Catalog Excel sheet!', 'success');
+            XLSX.writeFile(wb, `Profiles_Catalog_${brandFilter}_${dateStr}.xlsx`);
+            addToast('Successfully downloaded Profiles Catalog Excel sheet with reinforcements!', 'success');
             setIsDownloadProfileMenuOpen(false);
         } catch (error) {
             console.error('Profiles Excel Export Error:', error);
@@ -1483,14 +1727,18 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
     const handleExportProfilesPdf = () => {
         try {
             const headers = ['SKU', 'Profile Name', 'Brand', 'Category', 'Length (m)', 'Weight (kg/m)', 'Pcs/Packet'];
-            const rows = filteredProfiles.map(p => [
+            const hasReinf = filteredProfiles.some(p => isReinforcementProfile(p));
+            const allReinfs = profiles.filter(p => !p.deletedAt && !p.isMerged && isReinforcementProfile(p));
+            const exportList = (!hasReinf && allReinfs.length > 0) ? [...filteredProfiles, ...allReinfs] : filteredProfiles;
+
+            const rows = exportList.map(p => [
                 p.sku || 'N/A',
                 p.name || 'N/A',
                 p.brand || 'General',
                 p.category || 'N/A',
                 p.length || 0,
                 p.weight || 0,
-                p.piecesPerPacket || 4
+                p.piecesPerPacket || (isReinforcementProfile(p) ? 1 : 4)
             ]);
 
             if (rows.length === 0) {
@@ -1536,33 +1784,63 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                 const workbook = XLSX.read(data, { type: 'binary' });
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet);
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet);
                 
                 const rowsToProcess: any[] = [];
-                json.forEach((row: any) => {
-                    const sku = String(row['SKU'] || row['Code'] || row['Profile Code'] || row['profileCode'] || '').trim();
-                    if (!sku) return;
-                    const name = String(row['Description'] || row['Name'] || row['Profile Name'] || row['name'] || sku).trim();
-                    const brand = String(row['Brand'] || row['brand'] || (brandFilter !== 'All' ? brandFilter : brands[0]) || 'General').trim();
-                    const category = String(row['Series'] || row['Category'] || row['series'] || '80.5 SERIES').trim();
-                    const length = Number(row['Length'] || row['eachLengthMtrs'] || row['length'] || 5.9);
-                    const weight = Number(row['Weight'] || row['meterWeight'] || row['weight'] || 0);
-                    const piecesPerPacket = Number(row['Pieces/Packet'] || row['lengthsPerPacket'] || row['piecesPerPacket'] || 6);
-                    const topFilmWidth = String(row['Top Film Width'] || row['topFilmWidth'] || row['Top/Right Film'] || '38');
-                    const topStickerName = String(row['Top Sticker Name'] || row['topStickerName'] || row['Top Sticker'] || '');
-                    const bottomFilmWidth = String(row['Bottom Film Width'] || row['bottomFilmWidth'] || row['Bottom/Left Film'] || '38');
-                    const bottomStickerName = String(row['Bottom Sticker Name'] || row['bottomStickerName'] || row['Bottom Sticker'] || '');
+                json.forEach((row) => {
+                    // Helper to get value matching key variants case-insensitively
+                    const getVal = (...keys: string[]) => {
+                        for (const k of keys) {
+                            if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return row[k];
+                            // also search keys case-insensitively
+                            const foundKey = Object.keys(row).find(rk => rk.toLowerCase().replace(/[^a-z0-9]/g, '') === k.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                            if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== '') return row[foundKey];
+                        }
+                        return undefined;
+                    };
+
+                    const isExplicitMerged = !!getVal('isMerged', 'is_merged', 'merged');
+                    const rawSku = String(getVal('SKU', 'Profile SKU', 'Code', 'Profile Code', 'profileCode', 'Item Code', 'sku') || '').trim();
+                    const brand = String(getVal('Brand', 'brand', 'Make') || (brandFilter !== 'All' ? brandFilter : brands[0]) || 'General').trim();
+
+                    // If row has no SKU or is explicitly merged, treat as Merged Section Heading
+                    if (!rawSku || isExplicitMerged) {
+                        const sectionText = String(getVal('Description', 'Profile Name', 'Name', 'name', 'description', 'Section', 'Heading', 'Merged Section', 'Series', 'Category') || Object.values(row)[0] || '').trim();
+                        if (sectionText && sectionText !== 'undefined' && sectionText !== 'null' && sectionText !== '-') {
+                            rowsToProcess.push({
+                                sku: '',
+                                name: sectionText,
+                                category: 'Profile',
+                                profileType: 'WINDOW',
+                                uom: 'Pcs',
+                                length: 5.8,
+                                weight: 0,
+                                piecesPerPacket: 0,
+                                price: 0,
+                                brand,
+                                isMerged: true,
+                                mergedText: sectionText,
+                                mergedAlign: 'center',
+                                mergedBg: 'blue'
+                            });
+                        }
+                        return;
+                    }
+
+                    const sku = rawSku;
+                    const name = String(getVal('Description', 'Name', 'Profile Name', 'name', 'description') || sku).trim();
+                    const category = String(getVal('Series', 'Category', 'series', 'category') || '80.5 SERIES').trim();
+                    const length = Number(getVal('Length', 'Std Length', 'Standard Length', 'Length (m)', 'eachLengthMtrs', 'length') || 5.9);
+                    const weight = Number(getVal('Weight', 'Weight (kg/m)', 'Length Weight', 'weight') || 0);
+                    const piecesPerPacket = Number(getVal('Pieces/Packet', 'Pieces / Packet', 'Lengths/Packet', 'L/Pkt', 'lengthsPerPacket', 'piecesPerPacket') || 6);
+                    const topFilmWidth = String(getVal('Top Film Width', 'topFilmWidth', 'Top/Right Film', 'Top Film', 'Top Film (mm)') || '38');
+                    const topStickerName = String(getVal('Top Sticker Name', 'topStickerName', 'Top Sticker') || '');
+                    const bottomFilmWidth = String(getVal('Bottom Film Width', 'bottomFilmWidth', 'Bottom/Left Film', 'Bottom Film', 'Bottom Film (mm)') || '38');
+                    const bottomStickerName = String(getVal('Bottom Sticker Name', 'bottomStickerName', 'Bottom Sticker') || '');
+                    const price = Number(getVal('Price', 'price', 'Rate/Kg', 'Rate', 'Price (INR)') || 150);
+                    const hsnCode = String(getVal('HSN', 'HSN Code', 'hsnCode', 'hsn') || '39162099');
                     const openingStock = Number(
-                        row['Opening Stock'] || 
-                        row['Stock'] || 
-                        row['Quantity'] || 
-                        row['Current Stock'] || 
-                        row['Balance'] || 
-                        row['Qty'] || 
-                        row['Pieces'] || 
-                        row['stock'] || 
-                        row['Opening Qty'] ||
-                        0
+                        getVal('Opening Stock', 'Stock', 'Quantity', 'Current Stock', 'Balance', 'Qty', 'Pieces', 'stock', 'Opening Qty') || 0
                     );
 
                     rowsToProcess.push({
@@ -1574,29 +1852,36 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                         length,
                         weight,
                         piecesPerPacket,
-                        price: Number(row['Price'] || row['price'] || 150),
+                        price,
                         brand,
-                        hsnCode: String(row['HSN'] || '39162099'),
+                        hsnCode,
                         topFilmWidth,
                         topStickerName,
                         bottomFilmWidth,
                         bottomStickerName,
-                        openingStock
+                        openingStock,
+                        isMerged: false
                     });
                 });
 
                 if (rowsToProcess.length === 0) {
-                    addToast('No valid profiles found in Excel file.', 'info');
+                    addToast('No valid profiles or section headings found in Excel file.', 'info');
                     return;
                 }
 
-                // Check duplicates against existing profiles
+                // Check duplicates against existing profiles (ignoring merged section headers)
                 const conflicts: DuplicateConflictItem[] = [];
                 const nonConflicts: any[] = [];
 
                 rowsToProcess.forEach((item, idx) => {
+                    if (item.isMerged) {
+                        nonConflicts.push(item);
+                        return;
+                    }
+
                     const existing = profiles.find(p => 
                         !p.deletedAt &&
+                        !p.isMerged &&
                         p.sku.toLowerCase() === item.sku.toLowerCase() &&
                         (p.brand || 'General').toLowerCase() === (item.brand || 'General').toLowerCase()
                     );
@@ -1764,7 +2049,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
             const data = await res.json();
             if (data.profiles && Array.isArray(data.profiles)) {
                 const rowsToProcess: any[] = [];
-                data.profiles.forEach((p: any) => {
+                data.profiles.forEach((p) => {
                     if (p.sku) {
                         const profType = String(p.profileType || '').toUpperCase();
                         rowsToProcess.push({
@@ -1891,13 +2176,10 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
     const tabs = [
         { id: 'Profiles' as Tab, label: 'Profiles', icon: Package },
-        { id: 'Protective Films' as Tab, label: 'Protective Films', icon: Shield },
         { id: 'Dashboard' as Tab, label: 'Dashboard', icon: BarChart3 },
         { id: 'Quotations' as Tab, label: 'Quotations', icon: ClipboardList },
-        { id: 'Stock' as Tab, label: 'Stock (Window)', icon: Warehouse },
-        { id: 'Production' as Tab, label: 'Production (Window Inflow)', icon: Activity },
-        { id: 'Reinforcement Stock' as Tab, label: 'Reinforcement Stock', icon: Layers },
-        { id: 'Reinforcement Inflow' as Tab, label: 'Reinforcement Inflow', icon: CloudUploadIcon },
+        { id: 'Stock' as Tab, label: 'Stock', icon: Warehouse },
+        { id: 'Production' as Tab, label: 'Production', icon: Activity },
         { id: 'Data plan' as Tab, label: 'Data Plan', icon: FileSpreadsheet },
         { id: 'Planning' as Tab, label: 'Planning', icon: Calendar },
         { id: 'Scrap' as Tab, label: 'Scrap', icon: Trash2 },
@@ -1922,8 +2204,15 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         companySettings,
         updateCompanySettings,
         addProfile,
+        addProfiles,
+        insertProfileAt,
         updateProfile,
         deleteProfile,
+        permanentlyDeleteProfile,
+        deduplicateProfiles,
+        syncProfileSpecsBySku,
+        pushStandardCatalogueToAll,
+        syncBrandDataToAllTabs,
         dies: rawDies,
         productionPlans: rawProductionPlans,
         addProductionPlan,
@@ -1939,8 +2228,28 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         updateBrand,
         deleteBrand,
         dataPlanSheet,
-        updateDataPlanSheet
+        updateDataPlanSheet,
+        items,
+        inflowTransactions,
+        consumptionTransactions,
+        deleteItem,
+        updateItem,
+        resetCatalogueAndQuotations
     } = useStore();
+
+    const stockLevels = useMemo(() => {
+        const levels: Record<string, number> = {};
+        items.forEach(item => {
+            const inward = inflowTransactions
+                .filter(tx => tx.itemId === item.id && !tx.deletedAt)
+                .reduce((sum, tx) => sum + tx.quantity, 0);
+            const consumption = consumptionTransactions
+                .filter(tx => tx.itemId === item.id && !tx.deletedAt)
+                .reduce((sum, tx) => sum + tx.quantity, 0);
+            levels[item.id] = (item.openingStock || 0) + inward - consumption;
+        });
+        return levels;
+    }, [items, inflowTransactions, consumptionTransactions]);
 
     const profiles = useMemo(() => rawProfiles.filter(p => !p.deletedAt), [rawProfiles]);
     const profileTransactions = useMemo(() => rawProfileTransactions.filter(t => !t.deletedAt), [rawProfileTransactions]);
@@ -2092,56 +2401,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
     const importQuotationPresets = useCallback(() => {
         const presets = [
-            // 53 & 60 Sliding Series
-            { sku: '53ET', name: '2 TRACK (53mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 4.897, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '60SH', name: 'SLIDING SASH', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 4.610, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '38IL', name: 'INTERLOCK (38mm)', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.160, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '17.5 EB', name: 'SINGLE BEAD (17.5mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 25, weight: 1.121, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            
-            // 62, 80, 92, 95 & 112 Sliding Series
-            { sku: '62T', name: '2 TRACK (62mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.587, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '80.5F', name: '2.5 TRACK (80.5mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.997, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '92T', name: '2.5 TRACK (92mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 7.596, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '95ET', name: '3 TRACK (95mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 7.971, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '112T', name: '3 TRACK (112mm)', category: 'Sliding Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 9.785, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            
-            // Sashes & Mesh Profiles
-            { sku: '59SS', name: 'SMALL SASH', category: 'Sash', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.150, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '67MS', name: 'MEDIUM SASH', category: 'Sash', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.633, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '84BS', name: 'BIG SASH', category: 'Sash', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 7.154, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '84BS-WSG', name: 'BIG SASH (WSG)', category: 'Sash', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.904, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '53M', name: 'MESH', category: 'Mesh', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 12, weight: 2.850, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '62MM', name: 'MULLION MESH', category: 'Mesh', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 12, weight: 3.602, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '68OM', name: 'OPERNABLE MESH', category: 'Mesh', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.111, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-
-            // Casement 60 & 70 Series
-            { sku: '60OF', name: 'CASMENT OUTER (60mm)', category: 'Casement Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.075, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '72OF', name: 'CASMENT OUTER (72mm)', category: 'Casement Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 7.350, price: 125, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '60CS', name: 'CASEMENT SASH', category: 'Casement Series', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.890, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '74ZM', name: 'Z-MULION (74mm)', category: 'Mullion', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.545, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '60TM', name: 'T-MULLION (60mm)', category: 'Mullion', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.220, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '60FM', name: 'FALSE MULLION', category: 'Mullion', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 4.350, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-
-            // Glazing Beads
-            { sku: '11.5 DGB', name: 'DG BEAD (11.5mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.180, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '24.5 ESB', name: 'SMALL BEAD (24.5mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.535, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '35CB', name: 'BIGG BEAD (35mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 2.050, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '18GB', name: 'DOUBLE GLAZE BEAD (18mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.320, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '28GB', name: 'TRIPLE GLAZE BEAD (28mm)', category: 'Glazing Bead', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.680, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-
-            // Auxiliary & Panels
-            { sku: '44IL', name: 'INTERLOCK (44mm)', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.215, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '12PP', name: 'PANNEL BOARD (12mm)', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 3.106, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '20PP', name: 'PANNEL BOARD (20mm)', category: 'Auxiliary', profileType: 'DOOR', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 4.250, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '90CP', name: '90 DEGREE CORNER POST', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 5.800, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '135CP', name: '135 DEGREE BAY COUPLER', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 6.100, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: '180CP', name: '180 DEGREE COUPLER', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 3.450, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: 'SIL', name: 'SUB SILL / THRESHOLD', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 4.200, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: 'TRIM', name: 'WALL ARCHITRAVE TRIM', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 12, weight: 2.150, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: 'SF-40', name: 'SUB FRAME (40mm)', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 3.200, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-            { sku: 'DR-WEATHER', name: 'DRIP RAIL / WEATHER BAR', category: 'Auxiliary', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 16, weight: 1.450, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099' },
-
-            // Reinforcements (43+ Library)
+            // Reinforcements (Generic Library)
             { sku: '13X28X13', name: 'Galvanised Plain/Steel (80.SERIES)', category: 'Reinforcement', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.139, price: 95, brand: 'REINFORCEMENT', hsnCode: '80.SERIES' },
             { sku: '14X30X14', name: 'Galvanised Plain/Steel (2 TRACK)', category: 'Reinforcement', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.319, price: 95, brand: 'REINFORCEMENT', hsnCode: '2 TRACK' },
             { sku: '16X20X16', name: 'Galvanised Plain/Steel (MESH)', category: 'Reinforcement', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.135, price: 95, brand: 'REINFORCEMENT', hsnCode: 'MESH' },
@@ -2175,7 +2435,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
     const getProfileName = useCallback((id: string) => getProfile(id)?.name || 'Unknown Profile', [getProfile]);
     const getBrandBadge = useCallback((brand?: string) => (<span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 uppercase tracking-tighter border border-gray-200 dark:border-gray-600">{brand || 'NO BRAND'}</span>), []);
 
-    const generateInvoicePDF = useCallback((data: any) => {
+    const generateInvoicePDF = useCallback((data) => {
         const { jsPDF } = jspdf;
         const doc = new jsPDF({ orientation: 'landscape' }); // Landscape for more columns
         const isQuotation = !!data.items;
@@ -2236,7 +2496,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         let totalTaxable = 0;
         let totalWeightKgs = 0;
 
-        const tableBody = txData.map((t: any, i: number) => {
+        const tableBody = txData.map((t, i) => {
             const p = getProfile(t.profileId);
             const qty = Number(t.quantity || 0); 
             const pricePerKg = Number(t.unitPrice ?? p?.price ?? 0);
@@ -2314,19 +2574,60 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         doc.save(`${isQuotation ? 'Quotation' : 'Invoice'}_${refTx.refNo}.pdf`);
     }, [getProfile, companySettings]);
 
+    const handleDeleteProfileEverywhere = useCallback((id: string) => {
+        const target = profiles.find(p => p.id === id);
+        const name = target ? `${target.name} (${target.sku})` : 'this profile';
+        if (window.confirm(`Delete ${name} everywhere?\n\nThis will permanently remove it from Profiles, Stock, Quotations, Protective Films, Data Plan, Dies, and Scrap logs so it will not be seen anywhere.`)) {
+            permanentlyDeleteProfile(id);
+            addToast(`Profile ${name} completely removed everywhere.`, 'success');
+        }
+    }, [profiles, permanentlyDeleteProfile, addToast]);
+
     const allStockData = useMemo(() => {
+        // Group transactions by profileId once for O(1) lookup
+        const txByProfile = new Map<string, ProfileTransaction[]>();
+        profileTransactions.forEach(t => {
+            if (!t.deletedAt && t.profileId) {
+                const list = txByProfile.get(t.profileId) || [];
+                list.push(t);
+                txByProfile.set(t.profileId, list);
+            }
+        });
+
         return profiles.filter(p => !p.deletedAt).map(p => {
-            const relevantTxns = profileTransactions.filter(t => t.profileId === p.id && !t.deletedAt);
-            const production = relevantTxns.filter(t => t.type === 'PRODUCTION' || t.type === 'RETURN').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const dispatch = relevantTxns.filter(t => t.type === 'DISPATCH').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const scrap = relevantTxns.filter(t => t.type === 'SCRAP').reduce((sum, t) => {
-                 const qty = Number(t.quantity || 0);
-                 if (t.uom === 'Kgs' && p.weight && p.weight > 0) return sum + (qty / p.weight);
-                 return sum + qty;
-            }, 0);
-            const reserved = relevantTxns.filter(t => t.type === 'QUOTATION' && t.status === 'PENDING').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const currentStock = (production || 0) - (dispatch || 0) - (scrap || 0);
+            const relevantTxns = txByProfile.get(p.id) || [];
+            const opening = Number(p.openingStock) || Number((p as any).initialStock) || 0;
+            
+            // Single pass to collect all metrics
+            let production = 0;
+            let dispatch = 0;
+            let scrap = 0;
+            let reserved = 0;
+
+            relevantTxns.forEach(t => {
+                const qty = Number(t.quantity || 0);
+                if (t.type === 'PRODUCTION' || t.type === 'RETURN') {
+                    // Avoid double counting if opening stock is already captured
+                    const isOpening = t.refNo?.startsWith('INIT-') || t.refNo?.startsWith('OPENING-');
+                    if (!(opening > 0 && isOpening)) {
+                        production += qty;
+                    }
+                } else if (t.type === 'DISPATCH') {
+                    dispatch += qty;
+                } else if (t.type === 'SCRAP') {
+                    if (t.uom === 'Kgs' && p.weight && p.weight > 0) {
+                        scrap += (qty / p.weight);
+                    } else {
+                        scrap += qty;
+                    }
+                } else if (t.type === 'QUOTATION' && t.status === 'PENDING') {
+                    reserved += qty;
+                }
+            });
+
+            const currentStock = opening + production - dispatch - scrap;
             const reorderPoint = (p.reorderPoint !== undefined && p.reorderPoint !== null && p.reorderPoint > 0) ? p.reorderPoint : 50;
+            
             return { 
                 ...p, 
                 reorderPoint,
@@ -2343,46 +2644,71 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
     }, [profiles, profileTransactions]);
 
     const stockData = useMemo(() => {
-        return brandFilter === 'All' ? allStockData : allStockData.filter(p => (p.brand || 'General').toLowerCase() === brandFilter.toLowerCase());
-    }, [allStockData, brandFilter]);
+        if (brandFilter === 'All') return allStockData;
+        const target = brandFilter.toLowerCase();
+        return allStockData.filter(p => {
+            // Reinforcement profiles are standard across all brands
+            if (isReinforcementProfile(p)) return true;
+
+            const b = (p.brand || 'General').toLowerCase();
+            if (b === target) return true;
+            if (target === 'reinforcement' && p.profileType === 'REINFORCEMENT') return true;
+            return false;
+        });
+    }, [allStockData, brandFilter, isReinforcementProfile]);
 
     const filteredProfiles = useMemo(() => {
         let base = stockData;
         if (searchTerm) {
-            base = base.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+            const lower = searchTerm.toLowerCase();
+            base = base.filter(p => (p.name && p.name.toLowerCase().includes(lower)) || (p.sku && p.sku.toLowerCase().includes(lower)));
         }
         
-        if (typeFilter !== 'All') {
-            base = base.filter(p => p.profileType === typeFilter || (typeFilter === 'WINDOW' && !p.profileType));
+        // Category Switcher:
+        // WINDOW: Profiles only (Reinforcement strictly excluded)
+        // REINFORCEMENT: Reinforcements only
+        // All: Mix (Profiles + Reinforcements together)
+        if (typeFilter === 'WINDOW') {
+            base = base.filter(p => !isReinforcementProfile(p));
+        } else if (typeFilter === 'REINFORCEMENT') {
+            base = base.filter(p => isReinforcementProfile(p));
         }
 
-        if (activeTab === 'Profiles') {
-            return base;
-        } else if (activeTab === 'Stock') {
-            return base.filter(p => !p.profileType || p.profileType === 'WINDOW' || p.profileType === 'DOOR');
-        } else if (activeTab === 'Reinforcement Stock') {
-            return base.filter(p => p.profileType === 'REINFORCEMENT');
-        }
+        // Brand filtering is already handled in stockData memo above
         
         return base;
-    }, [stockData, searchTerm, activeTab, typeFilter]);
+    }, [stockData, searchTerm, typeFilter, isReinforcementProfile]);
+
+    // Active profiles count breakdown for switches
+    const profileMasterCount = useMemo(() => profiles.filter(p => !p.deletedAt && !isReinforcementProfile(p)).length, [profiles, isReinforcementProfile]);
+    const reinforcementMasterCount = useMemo(() => profiles.filter(p => !p.deletedAt && isReinforcementProfile(p)).length, [profiles, isReinforcementProfile]);
+    const totalMasterMixCount = useMemo(() => profiles.filter(p => !p.deletedAt).length, [profiles]);
+
+    // Stock items count breakdown for switches
+    const stockProfilesCount = useMemo(() => allStockData.filter(p => !isReinforcementProfile(p)).length, [allStockData, isReinforcementProfile]);
+    const stockReinforcementsCount = useMemo(() => allStockData.filter(p => isReinforcementProfile(p)).length, [allStockData, isReinforcementProfile]);
+    const totalStockMixCount = useMemo(() => allStockData.length, [allStockData]);
     
     const productionTransactions = useFilteredTransactions(profileTransactions, searchTerm, getProfile, 'PRODUCTION', brandFilter);
     const dispatchTransactions = useFilteredTransactions(profileTransactions, searchTerm, getProfile, 'DISPATCH', brandFilter);
 
-    const windowProductionTransactions = useMemo(() => {
+    const filteredProductionTransactions = useMemo(() => {
         return productionTransactions.filter(t => {
+            if (typeFilter === 'All') return true;
             const p = getProfile(t.profileId);
-            return !p?.profileType || p?.profileType === 'WINDOW';
+            const isReinf = isReinforcementProfile(p);
+            return typeFilter === 'REINFORCEMENT' ? isReinf : !isReinf;
         });
-    }, [productionTransactions, getProfile]);
+    }, [productionTransactions, getProfile, typeFilter, isReinforcementProfile]);
 
-    const reinforcementInflowTransactions = useMemo(() => {
-        return productionTransactions.filter(t => {
+    const filteredDispatchTransactions = useMemo(() => {
+        return dispatchTransactions.filter(t => {
+            if (typeFilter === 'All') return true;
             const p = getProfile(t.profileId);
-            return p?.profileType === 'REINFORCEMENT';
+            const isReinf = isReinforcementProfile(p);
+            return typeFilter === 'REINFORCEMENT' ? isReinf : !isReinf;
         });
-    }, [productionTransactions, getProfile]);
+    }, [dispatchTransactions, getProfile, typeFilter, isReinforcementProfile]);
 
     const groupedQuotations = useMemo(() => {
         const groups: Record<string, any> = {};
@@ -2394,8 +2720,8 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
             groups[t.refNo].totalAmount += (Number(t.quantity || 0) * (t.unitPrice || p?.price || 0));
             groups[t.refNo].items.push(t);
         });
-        let result = Object.values(groups).sort((a:any, b:any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        if (searchTerm) result = result.filter((g:any) => g.refNo.toLowerCase().includes(searchTerm.toLowerCase()) || g.customer?.toLowerCase().includes(searchTerm.toLowerCase()));
+        let result = Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        if (searchTerm) result = result.filter((g) => g.refNo.toLowerCase().includes(searchTerm.toLowerCase()) || g.customer?.toLowerCase().includes(searchTerm.toLowerCase()));
         return result;
     }, [profileTransactions, searchTerm, getProfile, brandFilter]);
 
@@ -2406,7 +2732,13 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
             stats[b] = { count: 0, pieces: 0, packets: 0, weight: 0 };
         });
 
-        profiles.filter(p => !p.deletedAt).forEach(p => {
+        profiles.filter(p => {
+            if (p.deletedAt) return false;
+            const isReinf = isReinforcementProfile(p);
+            if (typeFilter === 'WINDOW') return !isReinf;
+            if (typeFilter === 'REINFORCEMENT') return isReinf;
+            return true;
+        }).forEach(p => {
             const b = p.brand || 'NO BRAND';
             if (!stats[b]) stats[b] = { count: 0, pieces: 0, packets: 0, weight: 0 };
             
@@ -2427,7 +2759,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         });
 
         return stats;
-    }, [brands, profiles, profileTransactions]);
+    }, [brands, profiles, profileTransactions, typeFilter, isReinforcementProfile]);
 
     const handleQuotationAction = (refNo: string, action: 'CONFIRM_DISPATCH' | 'CONFIRM_RETURN' | 'CANCEL') => {
         const txns = profileTransactions.filter(t => t.refNo === refNo);
@@ -2478,6 +2810,18 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                     </button>
                     <button onClick={() => setIsManageBrandsModalOpen(true)} className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-700 dark:text-gray-300 font-black uppercase tracking-tighter text-xs hover:bg-gray-50 dark:hover:bg-gray-900 transition-all shadow-sm flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-yellow-500" /> Manage Brands
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to remove all profiles and start fresh?")) {
+                                resetCatalogueAndQuotations();
+                                addToast('All profiles cleared. Ready for fresh brand-wise data.', 'success');
+                            }
+                        }} 
+                        className="px-4 py-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 rounded-xl font-black uppercase tracking-tighter text-xs hover:bg-red-600 hover:text-white transition-all shadow-sm flex items-center gap-2"
+                        title="Clear all profiles to start fresh brand-wise"
+                    >
+                        <Trash2 className="w-4 h-4" /> Clear All Profiles
                     </button>
                     <button onClick={() => { setEditingProfile(null); setIsProfileModalOpen(true); }} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black uppercase tracking-tighter text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/25 flex items-center gap-2">
                         <Package className="w-4 h-4" /> Add Profile
@@ -2568,7 +2912,54 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
 
                 {activeTab === 'Stock' && (
                     <div className="space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                        {/* Unified Stock Segment Selection */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <div>
+                                <span className="text-xs font-black uppercase text-slate-500 tracking-wider">Stock Category:</span>
+                                <p className="text-[10px] font-bold text-slate-400 mt-0.5">Toggle to view either Window Profiles or Raw Materials stock ledger.</p>
+                            </div>
+                            <div className="inline-flex rounded-xl bg-slate-200/50 dark:bg-slate-900 p-1">
+                                <button
+                                    onClick={() => setStockSegment('profiles')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                        stockSegment === 'profiles'
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    <Layers className="w-3.5 h-3.5" />
+                                    <span>Profiles Stock</span>
+                                </button>
+                                <button
+                                    onClick={() => setStockSegment('raw')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                        stockSegment === 'raw'
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    <Warehouse className="w-3.5 h-3.5" />
+                                    <span>Raw Materials Stock</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {stockSegment === 'raw' ? (
+                            <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                <Stock
+                                    items={items}
+                                    stockLevels={stockLevels}
+                                    transactions={inflowTransactions}
+                                    consumptionTransactions={consumptionTransactions}
+                                    deleteItem={deleteItem}
+                                    updateItem={updateItem}
+                                    totalBatches={0}
+                                    addToast={addToast}
+                                />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm text-slate-900">
                             <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
                                 <div className="p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner flex flex-wrap gap-1">
                                     <button
@@ -2709,34 +3100,67 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                             })}
                         </div>
                         
+                        {/* Category Switcher in Stock Tab: Profiles vs Reinforcement vs Mix */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                            <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl flex-wrap">
+                                <button
+                                    onClick={() => setTypeFilter('WINDOW')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'WINDOW'
+                                            ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Package className="w-3.5 h-3.5" />
+                                    <span>Profiles</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                        typeFilter === 'WINDOW' ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                    }`}>
+                                        {stockProfilesCount}
+                                    </span>
+                                </button>
+                                <button
+                                    onClick={() => setTypeFilter('REINFORCEMENT')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'REINFORCEMENT'
+                                            ? 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Layers className="w-3.5 h-3.5" />
+                                    <span>Reinforcement</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                        typeFilter === 'REINFORCEMENT' ? 'bg-orange-50 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                    }`}>
+                                        {stockReinforcementsCount}
+                                    </span>
+                                </button>
+                                <button
+                                    onClick={() => setTypeFilter('All')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'All'
+                                            ? 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Shuffle className="w-3.5 h-3.5" />
+                                    <span>Mix (Profiles + Reinforcement)</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                        typeFilter === 'All' ? 'bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                    }`}>
+                                        {totalStockMixCount}
+                                    </span>
+                                </button>
+                            </div>
+                            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 px-3">
+                                {typeFilter === 'WINDOW' && 'Showing UPVC / Aluminium profile stock (Reinforcements removed)'}
+                                {typeFilter === 'REINFORCEMENT' && 'Showing steel reinforcements stock only'}
+                                {typeFilter === 'All' && 'Showing mixed inventory (Profiles & Reinforcements combined)'}
+                            </div>
+                        </div>
+                        
                         {stockSubTab === 'Current Stock' ? (
                             <div className="space-y-4">
-                                <div className="p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner flex flex-wrap gap-1">
-                                    <button
-                                        onClick={() => setTypeFilter('All')}
-                                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex-1 md:flex-initial text-center ${
-                                            typeFilter === 'All' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-                                        }`}
-                                    >
-                                        All Types
-                                    </button>
-                                    <button
-                                        onClick={() => setTypeFilter('WINDOW')}
-                                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex-1 md:flex-initial text-center ${
-                                            typeFilter === 'WINDOW' ? 'bg-white dark:bg-gray-800 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-                                        }`}
-                                    >
-                                        Profiles
-                                    </button>
-                                    <button
-                                        onClick={() => setTypeFilter('REINFORCEMENT')}
-                                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex-1 md:flex-initial text-center ${
-                                            typeFilter === 'REINFORCEMENT' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-                                        }`}
-                                    >
-                                        Reinforcements
-                                    </button>
-                                </div>
                                 <StockTable 
                                     stockData={filteredProfiles} 
                                     onEditProfile={(p:Profile) => {setEditingProfile(p); setIsProfileModalOpen(true);}}
@@ -2746,16 +3170,16 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                         setInitialTransactionBrand(p.brand);
                                         setIsTransactionModalOpen(true);
                                     }}
-                                    onDeleteProfile={deleteProfile}
+                                    onDeleteProfile={handleDeleteProfileEverywhere}
                                     getBrandBadge={getBrandBadge}
                                     updateProfile={updateProfile}
                                 />
                             </div>
                         ) : (
                             <TransactionTable 
-                                transactions={profileTransactions.filter(t => !t.deletedAt && (typeFilter === 'All' || (typeFilter === 'WINDOW' && (!getProfile(t.profileId)?.profileType || getProfile(t.profileId)?.profileType === 'WINDOW')) || (typeFilter === 'REINFORCEMENT' && getProfile(t.profileId)?.profileType === 'REINFORCEMENT')))} 
+                                transactions={profileTransactions.filter(t => !t.deletedAt && (typeFilter === 'All' || (typeFilter === 'WINDOW' && !isReinforcementProfile(getProfile(t.profileId))) || (typeFilter === 'REINFORCEMENT' && isReinforcementProfile(getProfile(t.profileId)))))} 
                                 getProfileName={getProfileName}
-                                onEdit={(tx:any) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
+                                onEdit={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
                                 onDelete={deleteProfileTransaction}
                                 type="PRODUCTION"
                                 getBrandBadge={getBrandBadge}
@@ -2763,11 +3187,57 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                 isMovementView={true}
                             />
                         )}
+                            </>
+                        )}
                     </div>
                 )}
 
                 {activeTab === 'Production' && (
                     <div className="space-y-4">
+                        {/* Category Switcher in Production: Profiles vs Reinforcement vs Mix */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                            <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl flex-wrap">
+                                <button
+                                    onClick={() => setTypeFilter('WINDOW')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'WINDOW'
+                                            ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Package className="w-3.5 h-3.5" />
+                                    <span>Profiles</span>
+                                </button>
+                                <button
+                                    onClick={() => setTypeFilter('REINFORCEMENT')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'REINFORCEMENT'
+                                            ? 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Layers className="w-3.5 h-3.5" />
+                                    <span>Reinforcement</span>
+                                </button>
+                                <button
+                                    onClick={() => setTypeFilter('All')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                        typeFilter === 'All'
+                                            ? 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    <Shuffle className="w-3.5 h-3.5" />
+                                    <span>Mix (Profiles + Reinforcement)</span>
+                                </button>
+                            </div>
+                            <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 px-3">
+                                {typeFilter === 'WINDOW' && 'Viewing Profile production & dispatch records'}
+                                {typeFilter === 'REINFORCEMENT' && 'Viewing Reinforcement inflow & dispatch records'}
+                                {typeFilter === 'All' && 'Viewing all production & dispatch records combined'}
+                            </div>
+                        </div>
+
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner flex flex-wrap gap-1">
                                 <button
@@ -2776,7 +3246,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                         productionSubTab === 'Inflow' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
                                     }`}
                                 >
-                                    Inflow (Production)
+                                    Inflow ({typeFilter === 'REINFORCEMENT' ? 'Reinforcement Inflow' : typeFilter === 'WINDOW' ? 'Profile Production' : 'Inflow Production'})
                                 </button>
                                 <button
                                     onClick={() => setProductionSubTab('Outflow')}
@@ -2789,18 +3259,23 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                             </div>
                             <div className="flex items-center gap-2">
                                 <button 
-                                    onClick={() => { setTransactionType(productionSubTab === 'Inflow' ? 'PRODUCTION' : 'DISPATCH'); setTransactionFilterType(null); setEditingTransaction(null); setIsTransactionModalOpen(true); }}
+                                    onClick={() => { 
+                                        setTransactionType(productionSubTab === 'Inflow' ? 'PRODUCTION' : 'DISPATCH'); 
+                                        setTransactionFilterType(typeFilter === 'REINFORCEMENT' ? 'REINFORCEMENT' : (typeFilter === 'WINDOW' ? 'WINDOW' : null)); 
+                                        setEditingTransaction(null); 
+                                        setIsTransactionModalOpen(true); 
+                                    }}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-blue-700 transition-all flex items-center gap-2"
                                 >
-                                    <UploadCloud className="w-3 h-3" /> Record {productionSubTab === 'Inflow' ? 'Production' : 'Dispatch'}
+                                    <UploadCloud className="w-3 h-3" /> Record {productionSubTab === 'Inflow' ? (typeFilter === 'REINFORCEMENT' ? 'Reinforcement Inflow' : 'Production') : 'Dispatch'}
                                 </button>
                             </div>
                         </div>
                         {productionSubTab === 'Inflow' ? (
                             <TransactionTable 
-                                transactions={windowProductionTransactions} 
+                                transactions={filteredProductionTransactions} 
                                 getProfileName={getProfileName}
-                                onEdit={(tx:any) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
+                                onEdit={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
                                 onDelete={deleteProfileTransaction}
                                 type="PRODUCTION"
                                 getBrandBadge={getBrandBadge}
@@ -2812,9 +3287,9 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                     <h3 className="text-xs font-black uppercase text-gray-400 tracking-widest">Dispatch Records</h3>
                                 </div>
                                 <TransactionTable 
-                                    transactions={dispatchTransactions} 
+                                    transactions={filteredDispatchTransactions} 
                                     getProfileName={getProfileName}
-                                    onEdit={(tx:any) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
+                                    onEdit={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
                                     onDelete={deleteProfileTransaction}
                                     onPrint={generateInvoicePDF}
                                     type="DISPATCH"
@@ -2847,7 +3322,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                         <TransactionTable 
                             transactions={profileTransactions.filter(t => t.type === 'SCRAP')}
                             getProfileName={getProfileName}
-                            onEdit={(tx: any) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
+                            onEdit={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
                             onDelete={deleteProfileTransaction}
                             type="SCRAP"
                             getBrandBadge={getBrandBadge}
@@ -2890,7 +3365,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                             plans={productionPlans} 
                             dies={dies} 
                             profiles={profiles}
-                            onEdit={(plan: any) => { setEditingPlan(plan); setIsPlanModalOpen(true); }}
+                            onEdit={(plan) => { setEditingPlan(plan); setIsPlanModalOpen(true); }}
                             onDelete={(id: string) => { if(confirm('Delete this plan?')) deleteProductionPlan(id); }}
                         />
                     </div>
@@ -2962,9 +3437,9 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                         <DieTable 
                             dies={dies.filter(d => brandFilter === 'All' || (d.brand || 'General').toLowerCase() === brandFilter.toLowerCase())} 
                             profiles={profiles}
-                            onEdit={(die: any) => { setEditingDie(die); setIsDieModalOpen(true); }}
+                            onEdit={(die) => { setEditingDie(die); setIsDieModalOpen(true); }}
                             onDelete={(id: string) => { if(confirm('Delete this die?')) deleteDie(id); }}
-                            onLogSheet={(die: any) => setLogSheetDie(die)}
+                            onLogSheet={(die) => setLogSheetDie(die)}
                         />
                     </div>
                 )}
@@ -2988,7 +3463,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                             : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
                                     }`}
                                 >
-                                    <Package className="w-3.5 h-3.5" /> Profiles Master Catalogue
+                                    <Package className="w-3.5 h-3.5" /> Standard Catalogue
                                 </button>
                                 <button
                                     onClick={() => setProfileSubTab('Protective Films')}
@@ -3003,9 +3478,19 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                             </div>
 
                             {profileSubTab === 'Protective Films' && (
-                                <span className="text-[11px] font-bold text-gray-500 px-3 hidden sm:inline">
-                                    ⚡ Real-time sticker auto-deduction from profile production
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-bold text-gray-500 px-3 hidden sm:inline">
+                                        ⚡ Real-time sticker auto-deduction from profile production
+                                    </span>
+                                    <button
+                                        onClick={() => setIsManageBrandsModalOpen(true)}
+                                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-tight flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                        title="Import Protective Film & Sticker Excel"
+                                    >
+                                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                                        <span>Import Film Excel</span>
+                                    </button>
+                                </div>
                             )}
                         </div>
 
@@ -3023,17 +3508,25 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 text-[10px] font-black uppercase tracking-widest mb-6 backdrop-blur-md">
                                                 <Zap className="w-3 h-3 fill-white" /> AI System Active
                                             </div>
-                                            <h3 className="text-4xl font-black tracking-tighter mb-4 leading-none">AI PDF Catalogue Ingestion</h3>
+                                            <h3 className="text-4xl font-black tracking-tighter mb-4 leading-none">AI PDF & Excel Catalogue Ingestion</h3>
                                             <p className="text-emerald-50 text-lg font-medium leading-relaxed opacity-90 max-w-2xl">
                                                 Automatically extract SKUs, Descriptions, Lengths, Piece Weights, and Meter Weights. 
                                                 Seamlessly sync multi-brand catalogues into your master database in seconds.
                                             </p>
                                         </div>
-                                        <div className="flex-shrink-0">
+                                        <div className="flex-shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                            <button 
+                                                onClick={() => handleOpenExcelImportModal('WINDOW')}
+                                                className="px-8 py-5 bg-white text-emerald-800 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-emerald-50 transition-all shadow-2xl shadow-black/20 flex items-center justify-center gap-3 active:scale-95 group/btn cursor-pointer"
+                                                title="Import Excel spreadsheet with brand selection"
+                                            >
+                                                <FileSpreadsheet className="w-6 h-6 text-emerald-600 group-hover/btn:-translate-y-1 transition-transform" />
+                                                Import Excel
+                                            </button>
                                             <button 
                                                 onClick={() => pdfFileInputRef.current?.click()}
                                                 disabled={isUploadingPdf}
-                                                className="px-10 py-5 bg-white text-emerald-700 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-emerald-50 transition-all shadow-2xl shadow-black/20 flex items-center gap-3 disabled:opacity-50 active:scale-95 group/btn"
+                                                className="px-8 py-5 bg-emerald-800/80 hover:bg-emerald-800 text-white rounded-2xl font-black uppercase tracking-widest text-sm transition-all shadow-2xl border border-white/20 flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 group/btn cursor-pointer"
                                             >
                                                 {isUploadingPdf ? (
                                                     <>
@@ -3051,215 +3544,134 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                                    <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
-                                        <div className="relative flex-1 max-w-md w-full">
-                                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Search profile master data by name or SKU..."
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                            />
-                                        </div>
+                                {/* Category Switcher: Profiles vs Reinforcement vs Mix */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                                    <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl flex-wrap">
+                                        <button
+                                            onClick={() => setTypeFilter('WINDOW')}
+                                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                                typeFilter === 'WINDOW'
+                                                    ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                            }`}
+                                        >
+                                            <Package className="w-3.5 h-3.5" />
+                                            <span>Profiles</span>
+                                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                                typeFilter === 'WINDOW' ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                            }`}>
+                                                {profileMasterCount}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setTypeFilter('REINFORCEMENT')}
+                                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                                typeFilter === 'REINFORCEMENT'
+                                                    ? 'bg-white dark:bg-gray-800 text-orange-600 dark:text-orange-400 shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                            }`}
+                                        >
+                                            <Layers className="w-3.5 h-3.5" />
+                                            <span>Reinforcement</span>
+                                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                                typeFilter === 'REINFORCEMENT' ? 'bg-orange-50 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                            }`}>
+                                                {reinforcementMasterCount}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setTypeFilter('All')}
+                                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 cursor-pointer ${
+                                                typeFilter === 'All'
+                                                    ? 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+                                            }`}
+                                        >
+                                            <Shuffle className="w-3.5 h-3.5" />
+                                            <span>Mix (Profiles + Reinforcement)</span>
+                                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono font-black ${
+                                                typeFilter === 'All' ? 'bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                            }`}>
+                                                {totalMasterMixCount}
+                                            </span>
+                                        </button>
                                     </div>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <Filter className="w-4 h-4 text-gray-400" />
-                                        <select
-                                            value={brandFilter}
-                                            onChange={(e) => setBrandFilter(e.target.value)}
-                                            className="bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-xs font-black uppercase tracking-tighter py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                        >
-                                            <option value="All">All Brands</option>
-                                            {brands.map(b => <option key={b} value={b}>{b}</option>)}
-                                        </select>
-                                        <button 
-                                            onClick={() => setIsManageBrandsModalOpen(true)}
-                                            className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-gray-200 dark:hover:bg-gray-700 transition-all flex items-center gap-2 border dark:border-gray-700"
-                                        >
-                                            <SparklesIcon className="w-4 h-4 text-blue-500" /> Manage Brands
-                                        </button>
-                                         <input 
-                                             type="file" 
-                                             ref={pdfFileInputRef} 
-                                             onChange={handlePdfCatalogueUpload} 
-                                             accept=".pdf,.txt,.csv" 
-                                             className="hidden" 
-                                         />
-                                         <input 
-                                             type="file" 
-                                             ref={excelFileInputRef} 
-                                             onChange={handleExcelCatalogueUpload} 
-                                             accept=".xlsx,.xls,.csv" 
-                                             className="hidden" 
-                                         />
-                                         <button 
-                                             onClick={() => excelFileInputRef.current?.click()}
-                                             className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-emerald-700 transition-all flex items-center gap-2"
-                                         >
-                                             <FileSpreadsheet className="w-4 h-4" /> Upload Excel Catalogue
-                                         </button>
-                                        <div className="relative" ref={downloadProfileMenuRef}>
-                                            <button
-                                                onClick={() => setIsDownloadProfileMenuOpen(prev => !prev)}
-                                                className="px-4 py-2 bg-slate-800 dark:bg-gray-700 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-slate-700 dark:hover:bg-gray-600 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-                                                title="Download profiles catalog in Excel or PDF format"
-                                            >
-                                                <Download className="w-3.5 h-3.5" />
-                                                <span>Export Report</span>
-                                                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isDownloadProfileMenuOpen ? 'rotate-180' : ''}`} />
-                                            </button>
-                                            {isDownloadProfileMenuOpen && (
-                                                <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-lg py-1.5 z-30 border border-gray-100 dark:border-gray-700">
-                                                    <button onClick={handleExportProfilesExcel} className="block w-full text-left px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        Download Excel
-                                                    </button>
-                                                    <button onClick={handleExportProfilesPdf} className="block w-full text-left px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        Download PDF
-                                                    </button>
-                                                </div>
-                                            )}
+                                        <div className="text-[11px] font-bold text-gray-500 dark:text-gray-400 px-3 hidden lg:inline">
+                                            {typeFilter === 'WINDOW' && 'Viewing window & door profiles only (Reinforcements excluded)'}
+                                            {typeFilter === 'REINFORCEMENT' && 'Viewing reinforcement master profiles only'}
+                                            {typeFilter === 'All' && 'Viewing combined master catalogue (Profiles & Reinforcement)'}
                                         </div>
-                                        <button 
-                                            onClick={() => { setEditingProfile(null); setIsProfileModalOpen(true); }}
-                                            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-blue-700 transition-all flex items-center gap-2"
-                                        >
-                                            <Package className="w-4 h-4" /> Add New Profile
-                                        </button>
+
+                                        {typeFilter === 'REINFORCEMENT' ? (
+                                            <button
+                                                onClick={() => handleOpenExcelImportModal('REINFORCEMENT')}
+                                                className="px-3.5 py-1.5 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white rounded-xl text-xs font-black uppercase tracking-tight flex items-center gap-1.5 shadow-sm shadow-orange-900/20 active:scale-95 transition-all cursor-pointer"
+                                                title="Import Reinforcement profiles from Excel spreadsheet (.xlsx/.csv)"
+                                            >
+                                                <Upload className="w-3.5 h-3.5" />
+                                                <span>Import Reinforcement Excel</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleOpenExcelImportModal(typeFilter === 'WINDOW' ? 'WINDOW' : 'AUTO')}
+                                                className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black uppercase tracking-tight flex items-center gap-1.5 shadow-sm shadow-emerald-900/20 active:scale-95 transition-all cursor-pointer"
+                                                title="Import profiles from Excel spreadsheet (.xlsx/.csv)"
+                                            >
+                                                <Upload className="w-3.5 h-3.5" />
+                                                <span>Import Excel</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Brand Wise Summary Cards */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                                    {brands.map(b => {
-                                        const bStat = brandWiseStockStats[b] || { count: 0, pieces: 0, weight: 0 };
-                                        const isSelected = brandFilter === b;
-                                        return (
-                                            <div 
-                                                key={b}
-                                                onClick={() => setBrandFilter(isSelected ? 'All' : b)}
-                                                className={`p-3 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
-                                                    isSelected 
-                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20' 
-                                                        : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
-                                                }`}
-                                            >
-                                                <div className="flex items-center justify-between mb-1.5">
-                                                    <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                        {b}
-                                                    </span>
-                                                    <span className={`px-1.5 py-0.5 rounded-lg text-[9px] font-mono font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
-                                                        {bStat.count} Profiles
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-sm font-black font-mono tracking-tight">{(bStat.pieces || 0).toLocaleString()} Pcs</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                <ProfileListTable 
-                                    profiles={filteredProfiles} 
-                                    onEdit={(p:Profile) => { setEditingProfile(p); setIsProfileModalOpen(true); }}
-                                    onDelete={deleteProfile}
-                                    getBrandBadge={getBrandBadge}
-                                    updateProfile={updateProfile}
+                                <input type="file" 
+                                    ref={pdfFileInputRef} 
+                                    onChange={handlePdfCatalogueUpload} 
+                                    accept=".pdf,.txt,.csv" 
+                                    className="hidden" 
                                 />
-                            </>
-                        )}
-                    </div>
-                )}
+                                <input 
+                                    type="file" 
+                                    ref={excelFileInputRef} 
+                                    onChange={handleExcelCatalogueUpload} 
+                                    accept=".xlsx,.xls,.csv" 
+                                    className="hidden" 
+                                />
 
-                {activeTab === 'Protective Films' && (
-                    <div className="space-y-6">
-                        <ProtectiveFilms defaultBrand={brandFilter} onOpenManageBrands={() => setIsManageBrandsModalOpen(true)} />
-                    </div>
-                )}
-
-                {activeTab === 'Reinforcement Stock' && (
-                    <div className="space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                             <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
-                                <div className="relative flex-1 max-w-md w-full">
-                                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search reinforcement stock by name or SKU..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                <ProfileMasterSpreadsheetGrid
+                                        profiles={profiles}
+                                        brands={brands}
+                                        selectedBrand={brandFilter}
+                                        onBrandChange={setBrandFilter}
+                                        typeFilter={typeFilter}
+                                        onTypeFilterChange={setTypeFilter}
+                                        searchTerm={searchTerm}
+                                        onSearchChange={setSearchTerm}
+                                        onUpdateProfile={updateProfile}
+                                        onEditProfile={(p) => {
+                                            setEditingProfile(p);
+                                            setIsProfileModalOpen(true);
+                                        }}
+                                        onAddProfile={addProfile}
+                                        onInsertProfileAt={insertProfileAt}
+                                        onDeleteProfile={deleteProfile}
+                                        onPermanentlyDeleteProfile={permanentlyDeleteProfile}
+                                        onDeduplicateProfiles={() => {
+                                            const removed = deduplicateProfiles();
+                                            if (removed > 0) {
+                                                addToast(`Cleaned ${removed} duplicate profile(s) and re-linked transactions.`, 'success');
+                                            } else {
+                                                addToast('No duplicate profiles found.', 'info');
+                                            }
+                                        }}
+                                        onSyncProfileSpecsBySku={syncProfileSpecsBySku}
+                                        onPushStandardCatalogueToAll={pushStandardCatalogueToAll}
+                                        onUploadExcelClick={() => handleOpenExcelImportModal(typeFilter === 'REINFORCEMENT' ? 'REINFORCEMENT' : (typeFilter === 'WINDOW' ? 'WINDOW' : 'AUTO'))}
+                                        addToast={addToast}
                                     />
-                                </div>
-                            </div>
-                             <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={importQuotationPresets}
-                                    className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-gray-200 dark:hover:bg-gray-700 transition-all flex items-center gap-2 border dark:border-gray-700"
-                                >
-                                    <SparklesIcon className="w-4 h-4 text-orange-500" /> Import Presets
-                                </button>
-                                <button 
-                                    onClick={() => { setEditingProfile(null); setIsProfileModalOpen(true); }}
-                                    className="px-4 py-2 bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-orange-700 transition-all flex items-center gap-2"
-                                >
-                                    <Layers className="w-4 h-4" /> Add New Reinforcement
-                                </button>
-                            </div>
+                                </>)}
                         </div>
-                        <StockTable 
-                            stockData={filteredProfiles} 
-                            onEditProfile={(p:Profile) => {setEditingProfile(p); setIsProfileModalOpen(true);}}
-                            onAddStock={(p: Profile) => {
-                                setTransactionType('PRODUCTION');
-                                setTransactionFilterType('REINFORCEMENT');
-                                setInitialTransactionProfile(p.id);
-                                setInitialTransactionBrand(p.brand);
-                                setIsTransactionModalOpen(true);
-                            }}
-                            onDeleteProfile={deleteProfile}
-                            getBrandBadge={getBrandBadge}
-                            updateProfile={updateProfile}
-                        />
-                    </div>
-                )}
-
-                {activeTab === 'Reinforcement Inflow' && (
-                    <div className="space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
-                             <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
-                                <div className="relative flex-1 max-w-md w-full">
-                                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search reinforcement inflow records..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                    />
-                                </div>
-                            </div>
-                             <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => { setTransactionType('PRODUCTION'); setTransactionFilterType('REINFORCEMENT'); setEditingTransaction(null); setIsTransactionModalOpen(true); }}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tighter hover:bg-blue-700 transition-all flex items-center gap-2"
-                                >
-                                    <CloudUploadIcon className="w-3 h-3" /> Record Reinforcement Inflow
-                                </button>
-                            </div>
-                        </div>
-                        <TransactionTable 
-                            transactions={reinforcementInflowTransactions} 
-                            getProfileName={getProfileName}
-                            onEdit={(tx:any) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
-                            onDelete={deleteProfileTransaction}
-                            type="PRODUCTION"
-                            getBrandBadge={getBrandBadge}
-                            getProfile={getProfile}
-                        />
-                    </div>
                 )}
 
                 {activeTab === 'Customers' && (
@@ -3381,7 +3793,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                     deleteMachine={deleteMachine}
                     addProfile={addProfile}
                     addDie={addDie}
-                    onSave={(plan: any) => {
+                    onSave={(plan) => {
                         if (editingPlan) updateProductionPlan({ ...editingPlan, ...plan });
                         else addProductionPlan(plan);
                         setIsPlanModalOpen(false);
@@ -3399,7 +3811,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                     die={editingDie}
                     profiles={profiles}
                     brands={brands}
-                    onSave={(data: any) => {
+                    onSave={(data) => {
                         if (editingDie) updateDie({ ...editingDie, ...data });
                         else addDie(data);
                         setIsDieModalOpen(false);
@@ -3476,20 +3888,35 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
                     brands={brands}
                 />
             </Portal>
+
+            <Portal>
+                <ExcelImportBrandModal
+                    isOpen={isExcelImportModalOpen}
+                    onClose={() => setIsExcelImportModalOpen(false)}
+                    brands={brands}
+                    initialBrand={excelImportPreselectedBrand}
+                    initialProfileType={excelImportPreselectedType}
+                    onConfirmImport={handleConfirmExcelImport}
+                    addToast={addToast}
+                />
+            </Portal>
         </div>
     );
-};
+}
 
 // --- EXPORT STOCK TO DATA PLAN MODAL ---
-const ExportStockToDataPlanModal: React.FC<{
+interface ExportStockToDataPlanModalProps {
     isOpen: boolean;
     onClose: () => void;
     brands: string[];
     profiles: Profile[];
     profileTransactions: ProfileTransaction[];
-    onExport: (selectedBrand?: string) => void;
+    onExport: (data: any) => void;
     onOpenDataPlanTab: () => void;
-}> = ({ isOpen, onClose, brands, profiles, profileTransactions, onExport, onOpenDataPlanTab }) => {
+}
+
+function ExportStockToDataPlanModal(props: ExportStockToDataPlanModalProps) {
+    const { isOpen, onClose, brands, profiles, profileTransactions, onExport, onOpenDataPlanTab } = props;
     const [selectedBrand, setSelectedBrand] = useState('All');
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -3645,7 +4072,9 @@ const ExportStockToDataPlanModal: React.FC<{
 };
 
 // --- NEW SUB-COMPONENTS FOR PLANNING & ANALYSIS ---
-const DieTable: React.FC<any> = ({ dies, profiles, onEdit, onDelete, onLogSheet }) => (
+function DieTable(props: any) {
+    const { dies, profiles, onEdit, onDelete, onLogSheet } = props;
+    return (
     <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <table className="w-full text-sm text-left">
             <thead className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest bg-gray-50/50 dark:bg-gray-900/50 border-b dark:border-gray-700">
@@ -3663,8 +4092,8 @@ const DieTable: React.FC<any> = ({ dies, profiles, onEdit, onDelete, onLogSheet 
                 {dies.length === 0 ? (
                     <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-400 font-medium italic">No dies registered.</td></tr>
                 ) : (
-                    dies.map((die: any) => {
-                        const profile = profiles.find((p: any) => p.id === die.profileId);
+                    dies.map((die) => {
+                        const profile = profiles.find((p) => p.id === die.profileId);
                         const brandName = die.brand || profile?.brand || 'General';
                         return (
                             <tr key={die.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all">
@@ -3700,9 +4129,11 @@ const DieTable: React.FC<any> = ({ dies, profiles, onEdit, onDelete, onLogSheet 
             </tbody>
         </table>
     </div>
-);
+    );
+}
 
-const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, onSave, addToast, brands, addProfile }) => {
+function DieModal(props: any) {
+    const { isOpen, onClose, die, profiles, onSave, addToast, brands, addProfile } = props;
     const [form, setForm] = useState({
         dieNo: '',
         profileId: '',
@@ -3750,7 +4181,7 @@ const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, onSave, addTo
             id: `p-${Date.now()}`,
             sku: generatedSku,
             name: newProfileForm.name.trim(),
-            brand: newProfileForm.brand || form.brand || brands[0] || 'RAVIRAJA',
+            brand: newProfileForm.brand || form.brand || brands[0] || 'Smart',
             profileType: newProfileForm.profileType as 'WINDOW' | 'REINFORCEMENT',
             uom: newProfileForm.uom || 'PCS',
             length: Number(newProfileForm.length) || 5.9,
@@ -3807,7 +4238,7 @@ const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, onSave, addTo
                                     setNewProfileForm({
                                         sku: '',
                                         name: '',
-                                        brand: form.brand || brands[0] || 'RAVIRAJA',
+                                        brand: form.brand || brands[0] || 'Smart',
                                         profileType: 'WINDOW',
                                         uom: 'PCS',
                                         length: 5.9,
@@ -3934,7 +4365,7 @@ const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, onSave, addTo
                             required
                         >
                             <option value="">-- Select Profile --</option>
-                            {profiles.filter((p: any) => p.brand === form.brand || !form.brand).map((p: any) => (
+                            {profiles.filter((p) => p.brand === form.brand || !form.brand).map((p) => (
                                 <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
                             ))}
                             <option value="__ADD_PROFILE__">+ Create New Profile / Item...</option>
@@ -3973,7 +4404,8 @@ const DieModal: React.FC<any> = ({ isOpen, onClose, die, profiles, onSave, addTo
     );
 };
 
-const ProcessLogSheetModal: React.FC<any> = ({ isOpen, onClose, die }) => {
+function ProcessLogSheetModal(props: any) {
+    const { isOpen, onClose, die } = props;
     if (!isOpen || !die) return null;
 
     return (
@@ -4015,7 +4447,7 @@ const ProcessLogSheetModal: React.FC<any> = ({ isOpen, onClose, die }) => {
     );
 };
 
-const QuickEntryCard: React.FC<{ onAction: (action: string) => void }> = ({ onAction }) => (
+const QuickEntryCard = ({ onAction }: any) => (
     <Card className="bg-gradient-to-br from-blue-600 to-blue-800 text-white border-none shadow-xl shadow-blue-500/20">
         <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-100 mb-4 opacity-70">Quick Operations</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -4039,7 +4471,9 @@ const QuickEntryCard: React.FC<{ onAction: (action: string) => void }> = ({ onAc
     </Card>
 );
 
-const PlanningTable: React.FC<any> = ({ plans, dies, profiles, onEdit, onDelete }) => (
+function PlanningTable(props: any) {
+    const { plans, dies, profiles, onEdit, onDelete } = props;
+    return (
     <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
         <table className="w-full text-sm text-left">
             <thead className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest bg-gray-50/50 dark:bg-gray-900/50 border-b dark:border-gray-700">
@@ -4056,9 +4490,9 @@ const PlanningTable: React.FC<any> = ({ plans, dies, profiles, onEdit, onDelete 
                 {(!plans || plans.length === 0) ? (
                     <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium italic">No production plans scheduled.</td></tr>
                 ) : (
-                    plans.map((plan: any) => {
+                    plans.map((plan) => {
                         const planDieIds = plan.dieIds || (plan.dieId ? [plan.dieId] : []);
-                        const planDies = planDieIds.map((id: string) => dies.find((d: any) => d.id === id)).filter(Boolean);
+                        const planDies = planDieIds.map((id: string) => dies.find((d) => d.id === id)).filter(Boolean);
                         const machineNo = plan.machineNo || plan.machine || 'EXT-01';
                         const targetLengths = plan.targetLengths !== undefined ? plan.targetLengths : (plan.targetLength || 0);
                         const planDate = plan.date ? (isNaN(new Date(plan.date).getTime()) ? plan.date : new Date(plan.date + (plan.date.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })) : 'N/A';
@@ -4076,8 +4510,8 @@ const PlanningTable: React.FC<any> = ({ plans, dies, profiles, onEdit, onDelete 
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex flex-col gap-1">
-                                        {planDies.map((die: any) => {
-                                            const profile = profiles.find((p: any) => p.id === die?.profileId);
+                                        {planDies.map((die) => {
+                                            const profile = profiles.find((p) => p.id === die?.profileId);
                                             return (
                                                 <div key={die?.id || Math.random()} className="flex flex-col">
                                                     <span className="font-bold text-gray-800 dark:text-gray-200 text-xs">{die?.dieNo || 'Unknown Die'}</span>
@@ -4113,29 +4547,31 @@ const PlanningTable: React.FC<any> = ({ plans, dies, profiles, onEdit, onDelete 
             </tbody>
         </table>
     </div>
-);
+    );
+}
 
-const MonthlyAnalysis: React.FC<any> = ({ profiles, transactions, month }) => {
+function MonthlyAnalysis(props: any) {
+    const { profiles, transactions, month } = props;
     const analysisData = useMemo(() => {
         const startOfMonth = new Date(month + '-01');
         const endOfMonth = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() + 1, 0);
         
-        return profiles.map((p: any) => {
-            const monthTxs = transactions.filter((t: any) => {
+        return profiles.map((p) => {
+            const monthTxs = transactions.filter((t) => {
                 const d = new Date(t.date);
                 return d >= startOfMonth && d <= endOfMonth && t.profileId === p.id;
             });
 
             const openingStock = transactions
-                .filter((t: any) => new Date(t.date) < startOfMonth && t.profileId === p.id)
-                .reduce((acc: number, t: any) => {
+                .filter((t) => new Date(t.date) < startOfMonth && t.profileId === p.id)
+                .reduce((acc, t) => {
                     if (t.type === 'PRODUCTION' || t.type === 'RETURN') return acc + t.quantity;
                     return acc - t.quantity;
                 }, p.initialStock || 0);
 
-            const production = monthTxs.filter((t: any) => t.type === 'PRODUCTION').reduce((acc: number, t: any) => acc + t.quantity, 0);
-            const dispatch = monthTxs.filter((t: any) => t.type === 'DISPATCH').reduce((acc: number, t: any) => acc + t.quantity, 0);
-            const scrap = monthTxs.filter((t: any) => t.type === 'SCRAP').reduce((acc: number, t: any) => acc + t.quantity, 0);
+            const production = monthTxs.filter((t) => t.type === 'PRODUCTION').reduce((acc, t) => acc + t.quantity, 0);
+            const dispatch = monthTxs.filter((t) => t.type === 'DISPATCH').reduce((acc, t) => acc + t.quantity, 0);
+            const scrap = monthTxs.filter((t) => t.type === 'SCRAP').reduce((acc, t) => acc + t.quantity, 0);
             const closingStock = openingStock + production - dispatch - scrap;
 
             return {
@@ -4190,7 +4626,7 @@ const MonthlyAnalysis: React.FC<any> = ({ profiles, transactions, month }) => {
                     </tr>
                 </thead>
                 <tbody className="divide-y dark:divide-gray-700">
-                    {analysisData.map((data: any) => (
+                    {analysisData.map((data) => (
                         <tr key={data.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all">
                             <td className="px-6 py-4">
                                 <div className="flex flex-col">
@@ -4212,21 +4648,22 @@ const MonthlyAnalysis: React.FC<any> = ({ profiles, transactions, month }) => {
     );
 };
 
-const ProductionPlanModal: React.FC<any> = ({ 
-    isOpen, 
-    onClose, 
-    plan, 
-    dies, 
-    profiles, 
-    onSave, 
-    addToast, 
-    brands, 
-    addDie,
-    machines = ['Machine 1', 'Machine 2', 'Machine 3', 'Machine 4', 'Machine 5', 'Machine 6', 'Line 1 (Twin Screw)', 'Line 2 (Single Screw)'],
-    addMachine,
-    deleteMachine,
-    addProfile
-}) => {
+function ProductionPlanModal(props: any) {
+    const { 
+        isOpen, 
+        onClose, 
+        plan, 
+        dies, 
+        profiles, 
+        onSave, 
+        addToast, 
+        brands, 
+        addDie,
+        machines = ['Machine 1', 'Machine 2', 'Machine 3', 'Machine 4', 'Machine 5', 'Machine 6', 'Line 1 (Twin Screw)', 'Line 2 (Single Screw)'],
+        addMachine,
+        deleteMachine,
+        addProfile
+    } = props;
     const defaultMachine = (machines && machines.length > 0) ? machines[0] : 'Machine 1';
     const [form, setForm] = useState({
         date: new Date().toISOString().split('T')[0],
@@ -4304,7 +4741,7 @@ const ProductionPlanModal: React.FC<any> = ({
         ? machines 
         : ['Machine 1', 'Machine 2', 'Machine 3', 'Machine 4', 'Machine 5', 'Machine 6'];
 
-    const filteredDies = brandFilter === 'All' ? dies : dies.filter((d: any) => d.brand === brandFilter);
+    const filteredDies = brandFilter === 'All' ? dies : dies.filter((d) => d.brand === brandFilter);
 
     const handleAddNewMachine = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -4327,7 +4764,7 @@ const ProductionPlanModal: React.FC<any> = ({
             id: `p-${Date.now()}`,
             sku: generatedSku,
             name: newProfileForm.name.trim(),
-            brand: newProfileForm.brand || newDieForm.brand || (brandFilter !== 'All' ? brandFilter : brands[0] || 'RAVIRAJA'),
+            brand: newProfileForm.brand || newDieForm.brand || (brandFilter !== 'All' ? brandFilter : brands[0] || 'Smart'),
             profileType: newProfileForm.profileType as 'WINDOW' | 'REINFORCEMENT',
             uom: newProfileForm.uom || 'PCS',
             length: Number(newProfileForm.length) || 5.9,
@@ -4376,7 +4813,7 @@ const ProductionPlanModal: React.FC<any> = ({
         const createdDie = {
             id: newId,
             dieNo: newDieForm.dieNo.trim(),
-            brand: newDieForm.brand || (brandFilter !== 'All' ? brandFilter : brands[0] || 'RAVIRAJA'),
+            brand: newDieForm.brand || (brandFilter !== 'All' ? brandFilter : brands[0] || 'Smart'),
             profileId: newDieForm.profileId,
             cavities: Number(newDieForm.cavities) || 1,
             expectedOutputKgHr: Number(newDieForm.expectedOutputKgHr) || 0,
@@ -4490,7 +4927,7 @@ const ProductionPlanModal: React.FC<any> = ({
                                 onClick={() => {
                                     setNewDieForm({
                                         dieNo: '',
-                                        brand: brandFilter !== 'All' ? brandFilter : (brands[0] || 'RAVIRAJA'),
+                                        brand: brandFilter !== 'All' ? brandFilter : (brands[0] || 'Smart'),
                                         profileId: profiles[0]?.id || '',
                                         cavities: 1,
                                         expectedOutputKgHr: 120,
@@ -4552,7 +4989,7 @@ const ProductionPlanModal: React.FC<any> = ({
                                                 setNewProfileForm({
                                                     sku: '',
                                                     name: '',
-                                                    brand: newDieForm.brand || brands[0] || 'RAVIRAJA',
+                                                    brand: newDieForm.brand || brands[0] || 'Smart',
                                                     profileType: 'WINDOW',
                                                     uom: 'PCS',
                                                     length: 5.9,
@@ -4615,12 +5052,12 @@ const ProductionPlanModal: React.FC<any> = ({
                                         className="w-full text-xs p-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="">-- Choose Profile --</option>
-                                        {profiles.filter((p: any) => !newDieForm.brand || p.brand === newDieForm.brand).map((p: any) => (
+                                        {profiles.filter((p) => !newDieForm.brand || p.brand === newDieForm.brand).map((p) => (
                                             <option key={p.id} value={p.id}>{p.name} ({p.sku}) {p.brand ? `[${p.brand}]` : ''}</option>
                                         ))}
-                                        {newDieForm.brand && profiles.filter((p: any) => p.brand !== newDieForm.brand).length > 0 && (
+                                        {newDieForm.brand && profiles.filter((p) => p.brand !== newDieForm.brand).length > 0 && (
                                             <optgroup label="Other Brands">
-                                                {profiles.filter((p: any) => p.brand !== newDieForm.brand).map((p: any) => (
+                                                {profiles.filter((p) => p.brand !== newDieForm.brand).map((p) => (
                                                     <option key={p.id} value={p.id}>{p.name} ({p.sku}) [{p.brand}]</option>
                                                 ))}
                                             </optgroup>
@@ -4680,8 +5117,8 @@ const ProductionPlanModal: React.FC<any> = ({
                         </div>
 
                         <div className="max-h-40 overflow-y-auto border dark:border-gray-700 rounded-xl p-2 space-y-1 bg-gray-50 dark:bg-gray-900/50">
-                            {filteredDies.map((d: any) => {
-                                const profile = profiles.find((p: any) => p.id === d.profileId);
+                            {filteredDies.map((d) => {
+                                const profile = profiles.find((p) => p.id === d.profileId);
                                 return (
                                     <label key={d.id} className="flex items-center gap-3 p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg cursor-pointer transition-all">
                                         <input 
@@ -4724,7 +5161,9 @@ const ProductionPlanModal: React.FC<any> = ({
 };
 
 // --- TABLE SUB-COMPONENTS ---
-const StockTable: React.FC<any> = ({ stockData, onEditProfile, onAddStock, onDeleteProfile, getBrandBadge, updateProfile }) => (
+function StockTable(props: any) {
+    const { stockData, onEditProfile, onAddStock, onDeleteProfile, getBrandBadge, updateProfile } = props;
+    return (
     <div className="overflow-x-auto shadow-xl rounded-xl">
         <table className="w-full text-[9px] border-collapse border border-black text-center dark:border-gray-600 bg-white dark:bg-gray-800">
             <thead className="bg-gray-100 dark:bg-gray-900 uppercase font-black tracking-tighter">
@@ -4738,19 +5177,24 @@ const StockTable: React.FC<any> = ({ stockData, onEditProfile, onAddStock, onDel
                     <th className="border-r border-black dark:border-gray-600 p-2">LEN WT</th>
                     <th className="border-r border-black dark:border-gray-600 p-2 italic text-[7px] text-gray-500">MTR WT</th>
                     <th className="border-r border-black dark:border-gray-600 p-2 text-red-600 bg-red-50 dark:bg-red-900/10 w-20">REORDER</th>
-                    <th className="border-r border-black dark:border-gray-600 p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">RECEIVED</th>
-                    <th className="border-r border-black dark:border-gray-600 p-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200">STOCK</th>
+                    <th className="border-r border-black dark:border-gray-600 p-2 bg-slate-50 text-gray-700">OPENING BAL</th>
+                    <th className="border-r border-black dark:border-gray-600 p-2 bg-emerald-50 text-emerald-800 dark:text-emerald-400">INFLOW (+)</th>
+                    <th className="border-r border-black dark:border-gray-600 p-2 bg-rose-50 text-rose-800 dark:text-rose-400">OUTFLOW (-)</th>
+                    <th className="border-r border-black dark:border-gray-600 p-2 bg-blue-50 text-blue-800 dark:text-blue-200">CLOSING BAL</th>
                     <th className="border-r border-black dark:border-gray-600 p-2">STATUS</th>
                     <th className="p-2 no-print">ACTION</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-black dark:divide-gray-600">
-                {stockData.map((p: any) => {
+                {stockData.map((p, index) => {
                     const isLow = p.currentStock < (p.reorderPoint || 0);
                     const meterWeight = (p.weight && p.length) ? (p.weight / p.length).toFixed(3) : '-';
+                    const openingBal = Number(p.openingStock) || Number(p.initialStock) || 0;
+                    const inflow = p.movement?.production || 0;
+                    const outflow = (p.movement?.dispatch || 0) + (p.movement?.scrap || 0);
                     
                     return (
-                        <tr key={p.id} className={`group hover:bg-yellow-50/10 transition-colors ${isLow ? 'bg-red-50/20' : ''}`}>
+                        <tr key={`${p.id || index}_${index}`} className={`group hover:bg-yellow-50/10 transition-colors ${isLow ? 'bg-red-50/20' : ''}`}>
                             <td className="border-r border-black dark:border-gray-600 p-2 font-mono font-black">{p.sku}</td>
                             <td className="border-r border-black dark:border-gray-600 p-2 text-left px-4 font-bold uppercase">{p.name}</td>
                             <td className="border-r border-black dark:border-gray-600 p-2 text-[8px]">{p.brand}</td>
@@ -4772,14 +5216,16 @@ const StockTable: React.FC<any> = ({ stockData, onEditProfile, onAddStock, onDel
                                     className="w-full bg-transparent border-none text-center focus:ring-0 focus:outline-none"
                                 />
                             </td>
-                            <td className="border-r border-black dark:border-gray-600 p-2 font-black text-blue-600 font-mono italic bg-blue-50/10">{p.movement.production}</td>
-                            <td className={`border-r border-black dark:border-gray-600 p-2 font-black font-mono text-xs ${isLow ? 'text-red-600 underline decoration-double' : 'text-gray-900 dark:text-white'}`}>
-                                {p.currentStock}
+                            <td className="border-r border-black dark:border-gray-600 p-2 font-mono font-bold text-gray-500 bg-slate-50/20">{openingBal.toLocaleString()}</td>
+                            <td className="border-r border-black dark:border-gray-600 p-2 font-black text-emerald-600 font-mono italic bg-emerald-50/10">{inflow.toLocaleString()}</td>
+                            <td className="border-r border-black dark:border-gray-600 p-2 font-black text-rose-600 font-mono italic bg-rose-50/10">{outflow.toLocaleString()}</td>
+                            <td className={`border-r border-black dark:border-gray-600 p-2 font-black font-mono text-xs bg-blue-50/10 ${isLow ? 'text-red-600 underline decoration-double' : 'text-gray-900 dark:text-white'}`}>
+                                {Number(p.currentStock || 0).toLocaleString()}
                             </td>
                             <td className="border-r border-black dark:border-gray-600 p-2">
                                 <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${
                                     isLow ? 'bg-red-600 text-white' : 'bg-green-600 text-white'
-                                }`}>
+                                }}`}>
                                     {isLow ? 'LOW' : 'OK'}
                                 </span>
                             </td>
@@ -4815,9 +5261,12 @@ const StockTable: React.FC<any> = ({ stockData, onEditProfile, onAddStock, onDel
             </tbody>
         </table>
     </div>
-);
+    );
+}
 
-const QuotationTable: React.FC<any> = ({ groupedQuotations, onAction, onEdit, onDelete, onPrint, getBrandBadge }) => (
+function QuotationTable(props: any) {
+    const { groupedQuotations, onAction, onEdit, onDelete, onPrint, getBrandBadge } = props;
+    return (
     <div className="overflow-x-auto">
         <table className="w-full text-sm text-left text-gray-600 dark:text-gray-400">
             <thead className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest bg-gray-50/50 dark:bg-gray-800/50 border-b dark:border-gray-700">
@@ -4831,7 +5280,7 @@ const QuotationTable: React.FC<any> = ({ groupedQuotations, onAction, onEdit, on
                 </tr>
             </thead>
             <tbody className="divide-y dark:divide-gray-700">
-                {groupedQuotations.map((group: any) => (
+                {groupedQuotations.map((group) => (
                     <tr key={group.refNo} className={`group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 ${group.status === 'CANCELLED' ? 'opacity-50 grayscale' : ''}`}>
                         <td className="px-6 py-4">{getBrandBadge(group.brand)}</td>
                         <td className="px-6 py-4">
@@ -4882,9 +5331,12 @@ const QuotationTable: React.FC<any> = ({ groupedQuotations, onAction, onEdit, on
             </tbody>
         </table>
     </div>
-);
+    );
+}
 
-const ProfileListTable: React.FC<any> = ({ profiles, onEdit, onDelete, getBrandBadge, updateProfile }) => (
+function ProfileListTable(props: any) {
+    const { profiles, onEdit, onDelete, getBrandBadge, updateProfile } = props;
+    return (
     <div className="overflow-x-auto shadow-xl rounded-xl">
         <table className="w-full text-[9px] border-collapse border border-black text-center dark:border-gray-600 bg-white dark:bg-gray-800">
             <thead className="bg-[#1e293b] text-white uppercase font-black tracking-tighter">
@@ -4907,7 +5359,7 @@ const ProfileListTable: React.FC<any> = ({ profiles, onEdit, onDelete, getBrandB
                 </tr>
             </thead>
             <tbody className="divide-y divide-black dark:divide-gray-600">
-                {profiles.map((p: any) => (
+                {profiles.map((p) => (
                     <tr key={p.id} className="group hover:bg-gray-50 transition-colors">
                         <td className="border-r border-black p-2">
                              <span className={`px-1 py-0.5 rounded text-[7px] font-black ${p.profileType === 'REINFORCEMENT' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}`}>
@@ -5022,13 +5474,16 @@ const ProfileListTable: React.FC<any> = ({ profiles, onEdit, onDelete, getBrandB
             </tbody>
         </table>
     </div>
-);
+    );
+}
 
-const CustomerTable: React.FC<any> = ({ customers, onEdit, onDelete }) => (
+function CustomerTable(props: any) {
+    const { customers, onEdit, onDelete } = props;
+    return (
     <table className="w-full text-sm text-left text-gray-600 dark:text-gray-400">
         <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700"><tr><th className="px-6 py-3">Name</th><th className="px-6 py-3">Phone</th><th className="px-6 py-3 text-right no-print">Actions</th></tr></thead>
         <tbody>
-            {customers.map((c: any) => (
+            {customers.map((c) => (
                 <tr key={c.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 font-bold text-gray-900 dark:text-white flex items-center gap-2"><UserIcon className="w-4 h-4 text-gray-400"/> {c.name}</td><td className="px-6 py-4 font-mono">{c.phone || '-'}</td>
                     <td className="px-6 py-4 text-right space-x-3 no-print"><button onClick={() => onEdit(c)} className="text-blue-500 hover:underline">Edit</button><button onClick={() => onDelete(c.id)} className="text-red-500 hover:underline">Del</button></td>
@@ -5036,10 +5491,12 @@ const CustomerTable: React.FC<any> = ({ customers, onEdit, onDelete }) => (
             ))}
         </tbody>
     </table>
-);
+    );
+}
 
 // --- UPDATED COMPANY SETTINGS MODAL ---
-const CompanySettingsModal: React.FC<any> = ({ isOpen, onClose, settings, updateSettings, brands, addToast }) => {
+function CompanySettingsModal(props: any) {
+    const { isOpen, onClose, settings, updateSettings, brands, addToast } = props;
     const [form, setForm] = useState<CompanySettings>(settings);
     const [selectedBrandForLogo, setSelectedBrandForLogo] = useState<string>(brands[0] || '');
     const [logoScale, setLogoScale] = useState(100);
@@ -5200,7 +5657,8 @@ const CompanySettingsModal: React.FC<any> = ({ isOpen, onClose, settings, update
     );
 };
 
-const ManageBrandsModal: React.FC<any> = ({ isOpen, onClose, brands, addBrand, updateBrand, deleteBrand, addToast }) => {
+function ManageBrandsModal(props: any) {
+    const { isOpen, onClose, brands, addBrand, updateBrand, deleteBrand, addToast } = props;
     const [newB, setNewB] = useState('');
     const [editingBrand, setEditingBrand] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -5268,7 +5726,8 @@ const ManageBrandsModal: React.FC<any> = ({ isOpen, onClose, brands, addBrand, u
     );
 };
 
-const ManageMachinesModal: React.FC<any> = ({ isOpen, onClose, machines = [], addMachine, deleteMachine, addToast }) => {
+function ManageMachinesModal(props: any) {
+    const { isOpen, onClose, machines = [], addMachine, deleteMachine, addToast } = props;
     const [newMachine, setNewMachine] = useState('');
 
     if (!isOpen) return null;
@@ -5347,12 +5806,7 @@ const ManageMachinesModal: React.FC<any> = ({ isOpen, onClose, machines = [], ad
 };
 
 
-const CatalogueBrandModal: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    onConfirm: (brand: string) => void;
-    brands: string[];
-}> = ({ isOpen, onClose, onConfirm, brands }) => {
+const CatalogueBrandModal = ({ isOpen, onClose, onConfirm, brands }: { isOpen: boolean; onClose: () => void; onConfirm: (brand: string) => void; brands: string[] }) => {
     const [selectedBrand, setSelectedBrand] = useState('');
     const [newBrand, setNewBrand] = useState('');
 

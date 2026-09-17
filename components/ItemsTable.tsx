@@ -7,7 +7,7 @@ interface ItemsTableProps {
   onEditItem: (item: Item) => void;
 }
 
-const ItemsTable: React.FC<ItemsTableProps> = ({ items, deleteItem, onEditItem }) => {
+const ItemsTable = ({ items, deleteItem, onEditItem }) => {
   const canManage = true; // All permissions enabled
 
   return (
@@ -20,6 +20,8 @@ const ItemsTable: React.FC<ItemsTableProps> = ({ items, deleteItem, onEditItem }
               <th scope="col" className="px-4 py-3 sm:px-6">Name</th>
               <th scope="col" className="px-4 py-3 sm:px-6">Category</th>
               <th scope="col" className="px-4 py-3 sm:px-6 hidden sm:table-cell">UOM</th>
+              <th scope="col" className="px-4 py-3 sm:px-6 text-right">Cost Price</th>
+              <th scope="col" className="px-4 py-3 sm:px-6 text-right">Opening Balance</th>
               {canManage && <th scope="col" className="px-4 py-3 sm:px-6 text-right">Actions</th>}
             </tr>
           </thead>
@@ -47,6 +49,12 @@ const ItemsTable: React.FC<ItemsTableProps> = ({ items, deleteItem, onEditItem }
                     </span>
                 </td>
                 <td className="px-4 py-4 sm:px-6 hidden sm:table-cell">{item.uom}</td>
+                <td className="px-4 py-4 sm:px-6 text-right font-mono text-gray-900 dark:text-white">
+                  ₹{Number(item.costPrice || 0).toFixed(2)}
+                </td>
+                <td className="px-4 py-4 sm:px-6 text-right font-mono text-blue-600 dark:text-blue-400 font-bold">
+                  {Number(item.openingStock || 0).toLocaleString()} {item.uom}
+                </td>
                 {canManage && (
                   <td className="px-4 py-4 sm:px-6 text-right space-x-3 whitespace-nowrap">
                       <button onClick={() => onEditItem(item)} className="text-blue-500 hover:text-blue-600 font-semibold transition-colors">Edit</button>
@@ -57,7 +65,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({ items, deleteItem, onEditItem }
             ))}
              {items.length === 0 && (
                 <tr>
-                    <td colSpan={canManage ? 4 : 3} className="text-center py-8 text-gray-500">No items found.</td>
+                    <td colSpan={canManage ? 7 : 6} className="text-center py-8 text-gray-500">No items found.</td>
                 </tr>
             )}
           </tbody>

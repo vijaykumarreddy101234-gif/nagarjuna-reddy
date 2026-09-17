@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from '../components/Card';
 
-const DeprecatedSetupPage: React.FC = () => {
+const DeprecatedSetupPage = () => {
     return (
         <div 
           className="min-h-screen bg-cover bg-center flex flex-col justify-center items-center p-4"

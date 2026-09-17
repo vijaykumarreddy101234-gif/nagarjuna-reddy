@@ -4,7 +4,7 @@ interface SignOptionsProps {
   onSelect: (option: 'gmail' | 'yahoo' | 'offline') => void;
 }
 
-const SignOptions: React.FC<SignOptionsProps> = ({ onSelect }) => {
+const SignOptions = ({ onSelect }) => {
   return (
     <div className="p-6 max-w-md mx-auto">
       <h2 className="text-xl font-semibold mb-4">Sign in</h2>

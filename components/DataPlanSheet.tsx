@@ -18,7 +18,7 @@ interface DataPlanSheetProps {
     onNavigateToPlanning?: () => void;
 }
 
-export const DataPlanSheet: React.FC<DataPlanSheetProps> = ({ onOpenManageBrands, onNavigateToPlanning }) => {
+export const DataPlanSheet = ({ onOpenManageBrands, onNavigateToPlanning }) => {
     const { 
         dataPlanSheet, 
         updateDataPlanSheet, 

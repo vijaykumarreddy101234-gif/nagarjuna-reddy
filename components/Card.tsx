@@ -8,7 +8,7 @@ interface CardProps {
   style?: React.CSSProperties;
 }
 
-export const Card: React.FC<CardProps> = ({ children, className = '', style }) => {
+export const Card = ({ children, className = '', style }: CardProps) => {
   return (
     <div 
       style={style}

@@ -8,7 +8,7 @@ interface CreateFormulaModalProps {
   onAdd: (formula: Omit<Formula, 'id' | 'createdAt'>) => void;
 }
 
-const CreateFormulaModal: React.FC<CreateFormulaModalProps> = ({ isOpen, onClose, items, onAdd }) => {
+const CreateFormulaModal = ({ isOpen, onClose, items, onAdd }) => {
     const getInitialState = () => ({
         name: '',
         outputProduct: '',

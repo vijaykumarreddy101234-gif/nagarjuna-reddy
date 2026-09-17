@@ -27,7 +27,7 @@ type ReportSection = 'materials' | 'profiles';
 type TimeFilter = '1M' | '3M' | '6M' | '12M' | 'ALL';
 
 
-const History: React.FC<HistoryProps> = (props) => {
+const History = (props) => {
     const [activeTab, setActiveTab] = useState<HistoryTab>('daily');
     const [activeSection, setActiveSection] = useState<ReportSection>('materials');
     const [brandFilter, setBrandFilter] = useState<string>('All');

@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Card } from '../components/Card';
 import { WarningIcon, SparklesIcon, SpinnerIcon, PlusIcon, TruckIcon, FileTextIcon } from '../components/Icon';
 import { RefreshCw, Layers, ShieldCheck, ArrowRight, UploadCloud, CheckCircle2, AlertTriangle, Package, Boxes, FileSpreadsheet, Eye } from 'lucide-react';
-import type { Item, Formula, BatchForecastResult, ToastMessage, ID, Page } from '../types';
+import type { Item, Formula, BatchForecastResult, ToastMessage, ID, Page, Profile, ProfileTransaction } from '../types';
 import { useStore } from '../store/useStore';
 import ItemListModal from '../components/ItemListModal';
 import LowStockItemsModal from '../components/LowStockItemsModal';
@@ -19,7 +19,7 @@ declare const Chart: any;
 // --- PORTAL COMPONENT ---
 // This lifts the modals out of the current component's DOM tree and renders them at the top level (document.body).
 // This is essential to bypass CSS stacking context issues caused by parent animations (like animate-fade-in-right).
-const Portal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const Portal = ({ children }) => {
     return createPortal(children, document.body);
 };
 
@@ -54,7 +54,7 @@ interface DashboardProps {
     navigate: (page: string, initialTab?: string, initialSubTab?: string, openModal?: string) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ items, stockLevels, stats, formulas, addToast, navigate }) => {
+const Dashboard = ({ items, stockLevels, stats, formulas, addToast, navigate }) => {
     const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
     const [isLowStockModalOpen, setIsLowStockModalOpen] = useState(false);
     const [isInventoryValueModalOpen, setIsInventoryValueModalOpen] = useState(false);
@@ -85,18 +85,44 @@ const Dashboard: React.FC<DashboardProps> = ({ items, stockLevels, stats, formul
 
     // Calculate live stock per profile
     const profileStockMap = useMemo(() => {
+        // Group transactions by profileId once for O(1) lookup
+        const txByProfile = new Map<string, ProfileTransaction[]>();
+        storeProfileTxns.forEach(t => {
+            if (!t.deletedAt && t.profileId) {
+                const list = txByProfile.get(t.profileId) || [];
+                list.push(t);
+                txByProfile.set(t.profileId, list);
+            }
+        });
+
         const map = new Map<string, { currentStock: number; packets: number; weightKg: number; reservedStock: number; isLowStock: boolean }>();
         brandProfiles.forEach(p => {
-            const txns = storeProfileTxns.filter(t => t.profileId === p.id && !t.deletedAt);
-            const prod = txns.filter(t => t.type === 'PRODUCTION' || t.type === 'RETURN').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const disp = txns.filter(t => t.type === 'DISPATCH').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const scrap = txns.filter(t => t.type === 'SCRAP').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-            const reserved = txns.filter(t => t.type === 'QUOTATION' && t.status === 'PENDING').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+            const txns = txByProfile.get(p.id) || [];
+            
+            let prod = 0;
+            let disp = 0;
+            let scrap = 0;
+            let reserved = 0;
+
+            txns.forEach(t => {
+                const qty = Number(t.quantity || 0);
+                if (t.type === 'PRODUCTION' || t.type === 'RETURN') {
+                    prod += qty;
+                } else if (t.type === 'DISPATCH') {
+                    disp += qty;
+                } else if (t.type === 'SCRAP') {
+                    scrap += qty;
+                } else if (t.type === 'QUOTATION' && t.status === 'PENDING') {
+                    reserved += qty;
+                }
+            });
+
             const curStock = Math.max(0, prod - disp - scrap);
             const pPerPkt = p.piecesPerPacket || 1;
             const pkts = pPerPkt > 0 ? Math.floor(curStock / pPerPkt) : 0;
             const wt = curStock * (p.weight || 0);
             const reorderPoint = (p.reorderPoint !== undefined && p.reorderPoint > 0) ? p.reorderPoint : 50;
+            
             map.set(p.id, {
                 currentStock: curStock,
                 packets: pkts,
@@ -168,7 +194,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, stockLevels, stats, formul
 
     // --- FORECAST STATE LIFTED FROM BATCH CALCULATOR ---
     const [selectedFormulaId, setSelectedFormulaId] = useState<string>(formulas[0]?.id || '');
-    const itemMap = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
+    const itemMap = useMemo(() => new Map<string, Item>(items.map(item => [item.id, item])), [items]);
 
     const calculationResult = useMemo<BatchForecastResult | null>(() => {
         if (!selectedFormulaId) return null;
@@ -402,7 +428,7 @@ const Dashboard: React.FC<DashboardProps> = ({ items, stockLevels, stats, formul
                     { label: 'Asset Collection', sub: 'Total Unique SKUs', value: stats.totalItems, onClick: () => setIsItemsModalOpen(true), color: 'blue', icon: '📦' },
                     { label: 'Inventory Capital', sub: 'Calculated Net Value', value: stats.totalInventoryValue.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }), onClick: () => setIsInventoryValueModalOpen(true), color: 'emerald', isCurrency: true, icon: '🏛️' },
                     { label: 'Production Ceiling', sub: 'Max Possible Runs', value: calculationResult?.maxBatches ?? 'N/A', onClick: () => calculationResult && handleForecastClick(calculationResult), color: 'indigo', disabled: !calculationResult, icon: '⚡' },
-                    { label: 'Total Batches Run', sub: 'Completed Production Batches', value: stats.totalBatches, onClick: () => navigate('Store Management', 'Consumption'), color: 'purple', icon: '🧪' },
+                    { label: 'Total Batches Run', sub: 'Completed Production Batches', value: stats.totalBatches, onClick: () => navigate('RM Section', 'Consumption'), color: 'purple', icon: '🧪' },
                     { label: 'Stock Criticality', sub: 'Action Required Items', value: stats.lowStockItems.length, onClick: () => setIsLowStockModalOpen(true), color: 'orange', disabled: stats.lowStockItems.length === 0, icon: '🚨' }
                  ].map((stat, idx) => {
                     const dotColors: Record<string, string> = {

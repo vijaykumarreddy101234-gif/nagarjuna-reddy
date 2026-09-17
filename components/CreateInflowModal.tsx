@@ -17,7 +17,7 @@ const initialNewItemState = {
     reorderPoint: '0',
 };
 
-const CreateInflowModal: React.FC<CreateInflowModalProps> = ({ isOpen, onClose, items, addTransaction, createItemAndInflow, addToast }) => {
+const CreateInflowModal = ({ isOpen, onClose, items, addTransaction, createItemAndInflow, addToast }) => {
   const [refNo, setRefNo] = useState('');
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -149,6 +149,16 @@ const CreateInflowModal: React.FC<CreateInflowModalProps> = ({ isOpen, onClose, 
                             {items.map(item => <option key={item.id} value={item.id}>{item.name} ({item.sku})</option>)}
                             <option value="__CREATE_NEW__" className="font-bold text-blue-600 dark:text-blue-400">-- Add New Material --</option>
                         </select>
+                        {itemId && itemId !== '__CREATE_NEW__' && (() => {
+                            const selectedItem = items.find(i => i.id === itemId);
+                            if (!selectedItem) return null;
+                            return (
+                                <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-900/50 flex justify-between items-center font-semibold">
+                                    <span>Opening Balance: <strong>{Number(selectedItem.openingStock || 0).toLocaleString()} {selectedItem.uom}</strong></span>
+                                    <span>Cost Price: <strong>₹{Number(selectedItem.costPrice || 0).toFixed(2)}</strong></span>
+                                </div>
+                            );
+                        })()}
                     </div>
                     {isCreatingNew && (
                         <div className="p-4 border border-blue-200 dark:border-gray-600 rounded-md space-y-4 bg-blue-50 dark:bg-gray-900/40">

@@ -52,7 +52,7 @@ const ROLE_COLORS: Record<Role, { bg: string; text: string; border: string }> = 
     VIEWER: { bg: 'bg-teal-50 dark:bg-teal-950/40', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800' }
 };
 
-const Users: React.FC<UsersProps> = ({ addToast }) => {
+const Users = ({ addToast }) => {
     const store = useStore();
     const appUsers = store.appUsers || [];
     const systemSettings = store.systemSettings || {};

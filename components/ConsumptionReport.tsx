@@ -10,7 +10,7 @@ interface ConsumptionReportProps {
     addOrUpdateReportCorrection: (correction: Omit<ReportCorrection, 'updatedAt'>) => void;
 }
 
-const ConsumptionReport: React.FC<ConsumptionReportProps> = ({ items, inflow, consumption, reportCorrections, addOrUpdateReportCorrection }) => {
+const ConsumptionReport = ({ items, inflow, consumption, reportCorrections, addOrUpdateReportCorrection }) => {
     const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
     const [correctingItem, setCorrectingItem] = useState<{
         item: Item;

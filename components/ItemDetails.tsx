@@ -8,7 +8,7 @@ interface ItemDetailsProps {
   onEditTransaction: (transaction: InflowTransaction) => void;
 }
 
-const ItemDetails: React.FC<ItemDetailsProps> = ({ transactions, items, deleteTransaction, onEditTransaction }) => {
+const ItemDetails = ({ transactions, items, deleteTransaction, onEditTransaction }) => {
   const getItemName = (itemId: string) => {
     return items.find(item => item.id === itemId)?.name || 'Unknown Item';
   };

@@ -38,7 +38,7 @@ interface CellData {
 const COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 const ROWS = Array.from({ length: 50 }, (_, i) => i + 1);
 
-const ExcelSheets: React.FC<ExcelSheetsProps> = ({ addToast }) => {
+const ExcelSheets = ({ addToast }) => {
     const store = useStore();
     const fileInputRef = useRef<HTMLInputElement>(null);
 

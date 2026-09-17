@@ -9,7 +9,7 @@ interface CustomerModalProps {
   addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, customer, onSave, addToast }) => {
+const CustomerModal = ({ isOpen, onClose, customer, onSave, addToast }) => {
   const getInitialState = (currentCustomer: Customer | null) => ({
     name: currentCustomer?.name || '',
     address: currentCustomer?.address || '',

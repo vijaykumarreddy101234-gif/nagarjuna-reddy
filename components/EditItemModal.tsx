@@ -41,6 +41,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, item, on
     e.preventDefault();
     const reorderPoint = parseFloat(String(formData.reorderPoint));
     const costPrice = parseFloat(String(formData.costPrice));
+    const openingStock = parseFloat(String(formData.openingStock));
 
     if (!formData.sku || !formData.name || !formData.uom || isNaN(reorderPoint)) {
       addToast?.('Please fill in all required fields with valid values.', 'error');
@@ -52,6 +53,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, item, on
         ...formData,
         reorderPoint,
         costPrice: isNaN(costPrice) ? undefined : costPrice,
+        openingStock: isNaN(openingStock) ? 0 : openingStock,
     });
     onClose();
   };
@@ -93,9 +95,15 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ isOpen, onClose, item, on
                         <input type="number" id="edit-reorderPoint" name="reorderPoint" value={formData.reorderPoint || ''} onChange={handleChange} className={inputStyles} required min="0"/>
                     </div>
                 </div>
-                <div>
-                    <label htmlFor="edit-costPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost Price</label>
-                    <input type="number" id="edit-costPrice" name="costPrice" value={formData.costPrice || ''} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="edit-costPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Cost Price</label>
+                        <input type="number" id="edit-costPrice" name="costPrice" value={formData.costPrice || ''} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                    </div>
+                    <div>
+                        <label htmlFor="edit-openingStock" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Opening Balance / Previous Month Stock</label>
+                        <input type="number" id="edit-openingStock" name="openingStock" value={formData.openingStock || ''} onChange={handleChange} className={inputStyles} min="0" step="0.01"/>
+                    </div>
                 </div>
             </div>
             <div className="mt-6 flex justify-end space-x-3">

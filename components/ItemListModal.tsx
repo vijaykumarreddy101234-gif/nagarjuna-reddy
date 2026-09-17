@@ -10,7 +10,7 @@ interface ItemListModalProps {
   title?: string;
 }
 
-const ItemListModal: React.FC<ItemListModalProps> = ({ isOpen, onClose, items, stockLevels, title }) => {
+const ItemListModal = ({ isOpen, onClose, items, stockLevels, title }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {

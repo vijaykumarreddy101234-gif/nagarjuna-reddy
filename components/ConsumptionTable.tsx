@@ -8,7 +8,7 @@ interface ConsumptionTableProps {
   onDelete: (txId: string) => void;
 }
 
-const ConsumptionTable: React.FC<ConsumptionTableProps> = ({ transactions, items, onEdit, onDelete }) => {
+const ConsumptionTable = ({ transactions, items, onEdit, onDelete }) => {
   const getItemName = (itemId: string) => items.find(item => item.id === itemId)?.name || 'Unknown Item';
   const canManage = true; // All permissions enabled
 

@@ -13,7 +13,7 @@ interface DeletedTransactionsTableProps {
   permanentlyDeleteTransaction: (id: string, type: 'inflow' | 'consumption') => void;
 }
 
-const DeletedTransactionsTable: React.FC<DeletedTransactionsTableProps> = ({ transactions, restoreTransaction, permanentlyDeleteTransaction }) => {
+const DeletedTransactionsTable = ({ transactions, restoreTransaction, permanentlyDeleteTransaction }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-md shadow">
       <div className="overflow-x-auto">

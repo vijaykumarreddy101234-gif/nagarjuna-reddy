@@ -7,7 +7,7 @@ interface DeletedFormulasTableProps {
   permanentlyDeleteFormula: (formulaId: string) => void;
 }
 
-const DeletedFormulasTable: React.FC<DeletedFormulasTableProps> = ({ formulas, restoreFormula, permanentlyDeleteFormula }) => {
+const DeletedFormulasTable = ({ formulas, restoreFormula, permanentlyDeleteFormula }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-md shadow">
       <div className="overflow-x-auto">

@@ -8,7 +8,7 @@ interface LowStockItemsModalProps {
   items: (Item & { currentStock: number })[];
 }
 
-const LowStockItemsModal: React.FC<LowStockItemsModalProps> = ({ isOpen, onClose, items }) => {
+const LowStockItemsModal = ({ isOpen, onClose, items }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {

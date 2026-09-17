@@ -12,15 +12,15 @@ interface CreateUserModalProps {
 
 const ROLE_DEFAULT_PAGES: Record<Role, string[]> = {
     ADMIN: [...ALL_SYSTEM_PAGES],
-    STORE_MANAGER: ['Dashboard', 'Store Management', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel'],
-    PURCHASE: ['Dashboard', 'Store Management', 'Quotations & Sales', 'Reports & History'],
+    STORE_MANAGER: ['Dashboard', 'RM Section', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel'],
+    PURCHASE: ['Dashboard', 'RM Section', 'Quotations & Sales', 'Reports & History'],
     SALES: ['Dashboard', 'Profiles & Stock', 'Quotations & Sales', 'Shipments', 'Reports & History'],
     MANAGEMENT: ['Dashboard', 'Profiles & Stock', 'Dies & Planning', 'Production', 'Protective Films', 'Reports & History', 'Quotations & Sales'],
     SECURITY: ['Dashboard', 'Reports & History'],
-    VIEWER: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'Store Management']
+    VIEWER: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'RM Section']
 };
 
-export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onAddUser }) => {
+export const CreateUserModal = ({ isOpen, onClose, onAddUser }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<Role>('STORE_MANAGER');
@@ -169,7 +169,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClos
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Raw Material Store"
+                                    placeholder="e.g. RM Section / Warehouse"
                                     value={department}
                                     onChange={e => setDepartment(e.target.value)}
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"

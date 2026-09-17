@@ -4,131 +4,36 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Item, InflowTransaction, ConsumptionTransaction, Formula, User, ReportCorrection, Profile, ProfileTransaction, CompanySettings, Customer, Die, ProductionPlan, Mail, Supplier, PurchaseOrder, DataPlanSheetState, DataPlanColumn, DataPlanRow, AppUser, SystemSettings, ProtectiveFilmItem, ProtectiveFilmInwardTransaction, ProtectiveFilmOutwardAdjustment, SecurityAuditLog } from '../types';
 import { INITIAL_DATA_PLAN_COLUMNS, INITIAL_DATA_PLAN_ROWS } from '../data/defaultDataPlan';
 import { DEFAULT_PROTECTIVE_FILM_ITEMS } from '../data/defaultProtectiveFilms';
+import { isReinforcementProfile } from '../utils';
 
 const pastDate = new Date();
 pastDate.setDate(pastDate.getDate() - 5);
 const pastDateISO = pastDate.toISOString();
 
-const MOCK_ITEMS: Item[] = [
-  { id: 'i1', sku: 'UPVC-RAW-001', name: 'UPVC Resin Grade A', category: 'Raw Material', uom: 'kg', reorderPoint: 200, createdAt: new Date().toISOString(), costPrice: 118.0 },
-  { id: 'i2', sku: 'UPVC-RAW-002', name: 'Calcium Carbonate', category: 'Raw Material', uom: 'kg', reorderPoint: 500, createdAt: new Date().toISOString(), costPrice: 38.5 },
-  { id: 'i3', sku: 'UPVC-RAW-003', name: 'Titanium Dioxide', category: 'Raw Material', uom: 'kg', reorderPoint: 100, createdAt: new Date().toISOString(), costPrice: 218.0 },
-  { id: 'i4', sku: 'UPVC-RAW-004', name: 'Pigment', category: 'Raw Material', uom: 'kg', reorderPoint: 60, createdAt: new Date().toISOString(), costPrice: 55.0 },
-];
+const MOCK_ITEMS: Item[] = [];
+const MOCK_INFLOW_TRANSACTIONS: InflowTransaction[] = [];
+const MOCK_CONSUMPTION_TRANSACTIONS: ConsumptionTransaction[] = [];
+const MOCK_FORMULAS: Formula[] = [];
+const MOCK_REPORT_CORRECTIONS: ReportCorrection[] = [];
 
-const MOCK_INFLOW_TRANSACTIONS: InflowTransaction[] = [
-    { id: 't4', refNo: 'PO-2025-0001', itemId: 'i1', quantity: 500, unitCost: 115.0, totalCost: 57500, warehouseId: 'wh1', supplier: 'Polychem Inc.', createdAt: pastDateISO, txnDate: pastDateISO },
-    { id: 't1', refNo: 'PO-2025-0004', itemId: 'i2', quantity: 1000, unitCost: 38.5, totalCost: 38500, warehouseId: 'wh1', supplier: 'Acme Minerals', createdAt: new Date().toISOString(), txnDate: new Date().toISOString() },
-    { id: 't2', refNo: 'PO-2025-0003', itemId: 'i1', quantity: 300, unitCost: 118.0, totalCost: 35400, warehouseId: 'wh1', supplier: 'Polychem Inc.', createdAt: new Date().toISOString(), txnDate: new Date().toISOString() },
-    { id: 't3', refNo: 'PO-2025-0002', itemId: 'i3', quantity: 200, unitCost: 218.0, totalCost: 43600, warehouseId: 'wh1', supplier: 'Global Chemicals', createdAt: new Date().toISOString(), txnDate: new Date().toISOString() },
-];
+const MOCK_PROFILES: Profile[] = [];
 
-const MOCK_CONSUMPTION_TRANSACTIONS: ConsumptionTransaction[] = [
-    { id: 'c4', refNo: 'BATCH-000', itemId: 'i1', quantity: 20, warehouseId: 'wh1', createdAt: pastDateISO, txnDate: pastDateISO, type: 'PROD' },
-    { id: 'c1', refNo: 'BATCH-001', itemId: 'i1', quantity: 10, warehouseId: 'wh1', createdAt: new Date().toISOString(), txnDate: new Date().toISOString(), type: 'PROD' },
-    { id: 'c2', refNo: 'BATCH-001', itemId: 'i2', quantity: 5, warehouseId: 'wh1', createdAt: new Date().toISOString(), txnDate: new Date().toISOString(), type: 'PROD' },
-    { id: 'c3', refNo: 'BATCH-002', itemId: 'i1', quantity: 15, warehouseId: 'wh1', createdAt: new Date().toISOString(), txnDate: new Date().toISOString(), type: 'PROD' },
-];
+const MOCK_PROFILE_TRANSACTIONS: ProfileTransaction[] = [];
 
-const MOCK_FORMULAS: Formula[] = [
-  {
-    id: 'f1',
-    name: 'Standard UPVC Mix',
-    outputProduct: 'UPVC Compound',
-    outputQuantity: 100,
-    outputUom: 'kg',
-    ingredients: [
-      { itemId: 'i1', quantity: 70 },
-      { itemId: 'i2', quantity: 25 },
-      { itemId: 'i3', quantity: 4 },
-      { itemId: 'i4', quantity: 1 },
-    ],
-    createdAt: new Date().toISOString(),
-  }
-];
 
-const MOCK_REPORT_CORRECTIONS: ReportCorrection[] = [
-    {
-        itemId: 'i2',
-        date: new Date().toISOString().split('T')[0],
-        correctedInflow: 1000,
-        correctedConsumption: 10,
-        reason: 'Physical count adjustment for wastage.',
-        updatedAt: new Date().toISOString(),
-    }
-];
+const MOCK_CUSTOMERS: Customer[] = [];
 
-const MOCK_PROFILES: Profile[] = [
-    // WINDOW PROFILES
-    { id: 'p1', sku: '53ET', name: '2 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 4.897, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p2', sku: '80.5F', name: '2.5 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.997, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p3', sku: '95ET', name: '3 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 7.971, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p4', sku: '60SH', name: 'SLIDING SASH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 4.61, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p5', sku: '38IL', name: 'INTERLOCK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.16, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p6', sku: '17.5 EB', name: 'SMALL BEAD', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 25, weight: 1.121, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p7', sku: '62T', name: '2 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.587, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p8', sku: '92T', name: '2.5 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 7.596, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p9', sku: '112T', name: '3 TRACK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 4, weight: 9.785, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p10', sku: '59SS', name: 'SMALL SASH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.150, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p11', sku: '67MS', name: 'MEDIUM SASH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.633, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p12', sku: '84BS', name: 'BIG SASH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 7.154, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p13', sku: '84BS-WSG', name: 'BIG SASH (WSG)', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.904, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p14', sku: '53M', name: 'MESH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 12, weight: 2.85, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p15', sku: '62MM', name: 'MULION MESH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 12, weight: 3.602, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p16', sku: '24.5 ESB', name: 'SMALL BEAD', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.535, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p17', sku: '35CB', name: 'BIGG BEAD', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 2.05, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p18', sku: '44IL', name: 'INTERLOCK', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.215, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p19', sku: '11.5 DGB', name: 'DG BEAD', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 20, weight: 1.18, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p20', sku: '60OF', name: 'CASMENT OUTER', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.075, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p21', sku: '72OF', name: 'CASMENT OUTER', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 7.35, price: 125, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p22', sku: '74ZM', name: 'Z-MULION', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 6.545, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p23', sku: '12PP', name: 'PANNEL BOARD', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 8, weight: 3.106, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
-    { id: 'p24', sku: '68OM', name: 'OPERNABLE MESH', category: 'Profile', profileType: 'WINDOW', uom: 'Pcs', length: 5.9, piecesPerPacket: 6, weight: 5.111, price: 150, brand: 'RAVIRAJA', hsnCode: '39162099', createdAt: new Date().toISOString() },
+const MOCK_DIES: Die[] = [];
 
-    // REINFORCEMENTS
-    { id: 'pr1', sku: '13X28X13', name: 'Galvanised Plain/Steel (80.SERIES)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.139, price: 95, brand: 'REINFORCEMENT', hsnCode: '80.SERIES', createdAt: new Date().toISOString() },
-    { id: 'pr2', sku: '14X30X14', name: 'Galvanised Plain/Steel (2 TRACK)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.319, price: 95, brand: 'REINFORCEMENT', hsnCode: '2 TRACK', createdAt: new Date().toISOString() },
-    { id: 'pr3', sku: '16X20X16', name: 'Galvanised Plain/Steel (MESH)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.135, price: 95, brand: 'REINFORCEMENT', hsnCode: 'MESH', createdAt: new Date().toISOString() },
-    { id: 'pr4', sku: '14X30X14-2.5', name: 'Galvanised Plain/Steel (2.5 TRACK)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.319, price: 95, brand: 'REINFORCEMENT', hsnCode: '2.5 TRACK', createdAt: new Date().toISOString() },
-    { id: 'pr5', sku: '14X30X14-3T', name: 'Galvanised Plain/Steel (3 Track)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.319, price: 95, brand: 'REINFORCEMENT', hsnCode: '3 Track', createdAt: new Date().toISOString() },
-    { id: 'pr6', sku: '17X30X17', name: 'Galvanised Plain/Steel (SMALL SASH)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.579, price: 95, brand: 'REINFORCEMENT', hsnCode: 'SMALL SASH', createdAt: new Date().toISOString() },
-    { id: 'pr7', sku: '17X30X17-MS', name: 'Galvanised Plain/Steel (Medium Sash)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.579, price: 95, brand: 'REINFORCEMENT', hsnCode: 'Medium Sash', createdAt: new Date().toISOString() },
-    { id: 'pr8', sku: '28X28X28', name: 'Galvanised Plain/Steel (Big Sash 84)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 3.158, price: 95, brand: 'REINFORCEMENT', hsnCode: 'Big Sash 84', createdAt: new Date().toISOString() },
-    { id: 'pr9', sku: '24X27X24', name: 'Galvanised Plain/Steel (CASMENT OUTER)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 3.086, price: 95, brand: 'REINFORCEMENT', hsnCode: 'CASMENT OUTER', createdAt: new Date().toISOString() },
-    { id: 'pr10', sku: '13X34X25', name: 'Galvanised Plain/Steel (78 Window)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.162, price: 95, brand: 'REINFORCEMENT', hsnCode: '78 Window', createdAt: new Date().toISOString() },
-    { id: 'pr11', sku: '20X25X20', name: 'Galvanised Plain/Steel (T MULLION)', category: 'Profile', profileType: 'REINFORCEMENT', uom: 'Pcs', length: 0, piecesPerPacket: 0, weight: 2.162, price: 95, brand: 'REINFORCEMENT', hsnCode: 'T MULLION', createdAt: new Date().toISOString() },
-];
+const MOCK_PRODUCTION_PLANS: ProductionPlan[] = [];
 
-const MOCK_PROFILE_TRANSACTIONS: ProfileTransaction[] = [
-    { id: 'pt1', profileId: 'p1', type: 'PRODUCTION', quantity: 100, date: pastDateISO, refNo: 'BATCH-001', createdAt: pastDateISO },
-    { id: 'qt1', profileId: 'p2', type: 'QUOTATION', quantity: 10, date: new Date().toISOString(), refNo: 'QT-001', status: 'PENDING', customer: 'Sunshine Builders', unitPrice: 980, brand: 'Smart', invoiceDetails: { category: 'Tax Invoice', reverseCharge: 'No', documentType: 'Tax Invoice', documentNo: 'QT-001', documentDate: new Date().toISOString(), legalName: 'Sunshine Builders', address1: '123 Main St', address2: '', location: '', pincode: '', phone: '', gstin: '', state: 'Telangana', email: '', placeOfSupply: 'Telangana', igstOnIntra: 'No', transactionType: 'Regular', totalTaxable: 9800, igstValue: 0, sgstValue: 882, cgstValue: 882, cessAdvolValue: 0, cessNonAdValue: 0, stateCessValue: 0, totalAmount: 11564 }, createdAt: new Date().toISOString() }
-];
+const MOCK_SUPPLIERS: Supplier[] = [];
 
-const MOCK_CUSTOMERS: Customer[] = [
-    { id: 'cust1', name: 'Sunshine Builders', address: '123 Main St, Hyderabad', gstin: '36ABCDE1234F1Z5', phone: '9876543210', createdAt: new Date().toISOString() },
-];
-
-const MOCK_DIES: Die[] = [
-    { id: 'd1', dieNo: 'DIE-SF-01', profileId: 'p1', brand: 'Scraft', cavities: 2, expectedOutputKgHr: 120, lifespanMeters: 500000, status: 'ACTIVE', createdAt: new Date().toISOString(), processLog: {} },
-    { id: 'd2', dieNo: 'DIE-CS-02', profileId: 'p2', brand: 'Smart', cavities: 1, expectedOutputKgHr: 80, lifespanMeters: 400000, status: 'MAINTENANCE', createdAt: new Date().toISOString(), processLog: {} },
-];
-
-const MOCK_PRODUCTION_PLANS: ProductionPlan[] = [
-    { id: 'pp1', date: new Date().toISOString().split('T')[0], shift: 'A', machineNo: 'EXT-01', dieIds: ['d1'], targetLengths: 500, status: 'PENDING', createdAt: new Date().toISOString() },
-];
-
-const MOCK_SUPPLIERS: Supplier[] = [
-    { id: 's1', name: 'Polychem Inc.', contactPerson: 'John Doe', email: 'john@polychem.com', phone: '1234567890', address: 'Chemical Zone, Mumbai', gstin: '27ABCDE1234F1Z5', rating: 4.5, leadTimeDays: 7, createdAt: new Date().toISOString() },
-    { id: 's2', name: 'Acme Minerals', contactPerson: 'Jane Smith', email: 'jane@acme.com', phone: '0987654321', address: 'Mining Hub, Rajasthan', gstin: '08FGHIJ5678K2Z0', rating: 4.2, leadTimeDays: 5, createdAt: new Date().toISOString() },
-];
-
-const MOCK_PURCHASE_ORDERS: PurchaseOrder[] = [
-    { id: 'po1', poNumber: 'PO-2025-0001', supplierId: 's1', items: [{ itemId: 'i1', quantity: 1000, unitCost: 115, totalCost: 115000 }], status: 'SENT', totalAmount: 115000, expectedDate: new Date(Date.now() + 7 * 86400000).toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-];
+const MOCK_PURCHASE_ORDERS: PurchaseOrder[] = [];
 
 export const ALL_SYSTEM_PAGES = [
     'Dashboard', 
-    'Store Management', 
+    'RM Section', 
     'Profiles & Stock', 
     'Dies & Planning', 
     'Production', 
@@ -166,7 +71,7 @@ export const MOCK_APP_USERS: AppUser[] = [
         email: 'rajesh.store@upvc.com',
         role: 'STORE_MANAGER',
         status: 'ACTIVE',
-        department: 'Raw Materials & Warehouse',
+        department: 'RM Section & Warehouse',
         phone: '+91 98480 23456',
         lastLogin: new Date(Date.now() - 3600000 * 2).toISOString(),
         createdAt: '2025-01-05T09:30:00.000Z',
@@ -174,7 +79,7 @@ export const MOCK_APP_USERS: AppUser[] = [
         canExport: true,
         canDelete: false,
         canEditPricing: false,
-        allowedPages: ['Dashboard', 'Store Management', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel']
+        allowedPages: ['Dashboard', 'RM Section', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel']
     },
     {
         id: 'u3',
@@ -190,7 +95,7 @@ export const MOCK_APP_USERS: AppUser[] = [
         canExport: true,
         canDelete: false,
         canEditPricing: true,
-        allowedPages: ['Dashboard', 'Store Management', 'Quotations & Sales', 'Reports & History']
+        allowedPages: ['Dashboard', 'RM Section', 'Quotations & Sales', 'Reports & History']
     },
     {
         id: 'u4',
@@ -238,7 +143,7 @@ export const MOCK_APP_USERS: AppUser[] = [
         canExport: true,
         canDelete: false,
         canEditPricing: false,
-        allowedPages: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'Store Management']
+        allowedPages: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'RM Section']
     }
 ];
 
@@ -292,7 +197,7 @@ export const MOCK_SECURITY_AUDIT_LOGS: SecurityAuditLog[] = [
 
 
 const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
-    name: 'MY COMPANY NAME',
+    name: 'RAVIRAJA',
     addressLine1: 'Plot No 123, Industrial Area',
     addressLine2: 'Near City Center',
     cityStateZip: 'Hyderabad, Telangana - 500001',
@@ -418,8 +323,13 @@ interface AppState {
 
     // Profile Actions
     addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>) => Profile;
+    addProfiles: (profiles: Omit<Profile, 'id' | 'createdAt'>[]) => Profile[];
+    insertProfileAt: (profile: Omit<Profile, 'id' | 'createdAt'>, relativeId?: string | null, position?: 'above' | 'below') => Profile;
     syncProfilesToStock: () => void;
+    syncProfileSpecsBySku: (sourceProfileId: string) => void;
+    pushStandardCatalogueToAll: (sourceBrand?: string) => { syncedProfiles: number; syncedFilms: number; syncedBrands: number };
     syncBrandDataToAllTabs: (targetBrand?: string) => { profilesCount: number; filmsCount: number; diesCount: number; brand: string };
+    deduplicateProfiles: () => number;
     updateProfile: (profile: Profile) => void;
     deleteProfile: (id: string) => void;
     restoreProfile: (id: string) => void;
@@ -431,6 +341,7 @@ interface AppState {
     restoreProfileTransaction: (id: string) => void;
     permanentlyDeleteProfileTransaction: (id: string) => void;
     resolveQuotation: (id: string, action: 'CONFIRM_DISPATCH' | 'CONFIRM_RETURN' | 'CANCEL') => void;
+    resetCatalogueAndQuotations: () => void;
 
     // Customers
     addCustomer: (customer: Omit<Customer, 'id' | 'createdAt' | 'deletedAt'>) => void;
@@ -567,9 +478,9 @@ export const useStore = create<AppState>()(
       consumptionTransactions: MOCK_CONSUMPTION_TRANSACTIONS,
       formulas: MOCK_FORMULAS,
       reportCorrections: MOCK_REPORT_CORRECTIONS,
-      profiles: MOCK_PROFILES,
-      profileTransactions: MOCK_PROFILE_TRANSACTIONS,
-      brands: ['RAVIRAJA', 'Scraft', 'Smart'],
+      profiles: [],
+      profileTransactions: [],
+      brands: [],
       customers: MOCK_CUSTOMERS,
       dies: MOCK_DIES,
       productionPlans: MOCK_PRODUCTION_PLANS,
@@ -923,8 +834,6 @@ export const useStore = create<AppState>()(
 
       // Profile Actions
       addProfile: (profile) => {
-          let updatedProfiles = [...get().profiles];
-          let updatedFilms = [...get().protectiveFilmItems];
           const profBrand = (profile.brand || 'General').trim();
 
           // Auto-register brand if not present in brands list
@@ -933,43 +842,107 @@ export const useStore = create<AppState>()(
               set({ brands: [...currentBrands, profBrand] });
           }
 
-          const existingIdx = updatedProfiles.findIndex(p => 
+          const isMerged = !!profile.isMerged;
+          const hasSku = !isMerged && !!profile.sku?.trim();
+          const isReinforcement = profile.profileType === 'REINFORCEMENT' || 
+              profBrand.toLowerCase() === 'reinforcement' ||
+              (profile.category && (
+                  profile.category.toLowerCase().includes('reinforc') || 
+                  profile.category.toLowerCase().includes('steel') || 
+                  profile.category.toLowerCase().includes('gi') || 
+                  profile.category.toLowerCase().includes('galvanis') || 
+                  profile.category.toLowerCase().includes('galvaniz')
+              )) ||
+              (profile.name && (
+                  profile.name.toLowerCase().includes('reinforc') || 
+                  profile.name.toLowerCase().includes('galvanis') || 
+                  profile.name.toLowerCase().includes('galvaniz') || 
+                  profile.name.toLowerCase().includes('steel') || 
+                  profile.name.toLowerCase().includes('gi ') || 
+                  profile.name.toLowerCase().includes('gi-') || 
+                  profile.name.toLowerCase().includes('gi reinf')
+              )) ||
+              (profile.sku && (
+                  profile.sku.toLowerCase().startsWith('reinf') || 
+                  profile.sku.toLowerCase().startsWith('gi-') || 
+                  profile.sku.toLowerCase().startsWith('steel-') || 
+                  /\b\d+x\d+(?:x\d+)?\b/i.test(profile.sku)
+              )) ||
+              (profile.hsnCode && (profile.hsnCode.startsWith('7216') || profile.hsnCode === '72169910'));
+
+          const resolvedType = isReinforcement ? 'REINFORCEMENT' : (profile.profileType || 'WINDOW');
+          const resolvedCategory = isReinforcement 
+              ? (profile.category || 'GI Reinforcement') 
+              : (profile.category || '80.5 SERIES');
+          const resolvedHsn = isReinforcement ? (profile.hsnCode || '72169910') : (profile.hsnCode || '39162099');
+
+          const profileWithResolvedType = {
+              ...profile,
+              profileType: resolvedType,
+              category: resolvedCategory,
+              hsnCode: resolvedHsn,
+              brand: profBrand
+          };
+
+          const state = get();
+          let updatedProfiles = [...state.profiles];
+          let updatedFilms = [...state.protectiveFilmItems];
+
+          const existingIdx = hasSku ? updatedProfiles.findIndex(p => 
+              !p.isMerged &&
               p.sku.toLowerCase() === profile.sku.toLowerCase() && 
-              (p.brand || 'General').toLowerCase() === profBrand.toLowerCase()
-          );
+              (
+                  (p.brand || 'General').toLowerCase() === profBrand.toLowerCase() ||
+                  (isReinforcement && (
+                      p.profileType === 'REINFORCEMENT' || 
+                      (p.brand || '').toLowerCase() === 'reinforcement' ||
+                      (p.category || '').toLowerCase().includes('reinforce') ||
+                      (p.category || '').toLowerCase().includes('steel') ||
+                      (p.category || '').toLowerCase().includes('gi')
+                  ))
+              )
+          ) : -1;
           
           let resolvedProfile: Profile;
 
           if (existingIdx >= 0) {
               const existing = updatedProfiles[existingIdx];
-              const updated = { ...existing, ...profile, id: existing.id, brand: profBrand };
+              const updated: Profile = { 
+                  ...existing, 
+                  ...profileWithResolvedType, 
+                  id: existing.id, 
+                  brand: profBrand,
+                  meterWeight: profile.meterWeight !== undefined ? profile.meterWeight : (existing as any).meterWeight
+              };
               updatedProfiles[existingIdx] = updated;
 
-              // Also sync corresponding protective film / stock item if present
-              const filmIdx = updatedFilms.findIndex(f => 
-                  f.profileCode.toLowerCase() === profile.sku.toLowerCase() && 
-                  (f.brand || 'General').toLowerCase() === profBrand.toLowerCase()
-              );
-              if (filmIdx >= 0) {
-                  updatedFilms[filmIdx] = {
-                      ...updatedFilms[filmIdx],
-                      description: profile.name || updatedFilms[filmIdx].description,
-                      series: profile.category || updatedFilms[filmIdx].series,
-                      lengthsPerPacket: profile.piecesPerPacket || updatedFilms[filmIdx].lengthsPerPacket,
-                      eachLengthMtrs: profile.length || updatedFilms[filmIdx].eachLengthMtrs,
-                      meterWeight: profile.weight || updatedFilms[filmIdx].meterWeight,
-                      lengthWeightWithGasket: profile.weight || updatedFilms[filmIdx].lengthWeightWithGasket,
-                      topFilmWidth: profile.topFilmWidth !== undefined ? profile.topFilmWidth : updatedFilms[filmIdx].topFilmWidth,
-                      topStickerName: profile.topStickerName !== undefined ? profile.topStickerName : updatedFilms[filmIdx].topStickerName,
-                      bottomFilmWidth: profile.bottomFilmWidth !== undefined ? profile.bottomFilmWidth : updatedFilms[filmIdx].bottomFilmWidth,
-                      bottomStickerName: profile.bottomStickerName !== undefined ? profile.bottomStickerName : updatedFilms[filmIdx].bottomStickerName,
-                  };
+              // Also sync corresponding protective film / stock item if present (skip for reinforcements)
+              if (!isReinforcement) {
+                  const filmIdx = updatedFilms.findIndex(f => 
+                      f.profileCode.toLowerCase() === profile.sku.toLowerCase() && 
+                      (f.brand || 'General').toLowerCase() === profBrand.toLowerCase()
+                  );
+                  if (filmIdx >= 0) {
+                      updatedFilms[filmIdx] = {
+                          ...updatedFilms[filmIdx],
+                          description: profile.name || updatedFilms[filmIdx].description,
+                          series: resolvedCategory || updatedFilms[filmIdx].series,
+                          lengthsPerPacket: profile.piecesPerPacket || updatedFilms[filmIdx].lengthsPerPacket,
+                          eachLengthMtrs: profile.length || updatedFilms[filmIdx].eachLengthMtrs,
+                          meterWeight: profile.weight || updatedFilms[filmIdx].meterWeight,
+                          lengthWeightWithGasket: profile.weight || updatedFilms[filmIdx].lengthWeightWithGasket,
+                          topFilmWidth: profile.topFilmWidth !== undefined ? profile.topFilmWidth : updatedFilms[filmIdx].topFilmWidth,
+                          topStickerName: profile.topStickerName !== undefined ? profile.topStickerName : updatedFilms[filmIdx].topStickerName,
+                          bottomFilmWidth: profile.bottomFilmWidth !== undefined ? profile.bottomFilmWidth : updatedFilms[filmIdx].bottomFilmWidth,
+                          bottomStickerName: profile.bottomStickerName !== undefined ? profile.bottomStickerName : updatedFilms[filmIdx].bottomStickerName,
+                      };
+                  }
               }
               set({ profiles: updatedProfiles, protectiveFilmItems: updatedFilms });
               resolvedProfile = updated;
           } else {
               const newProfile: Profile = { 
-                  ...profile, 
+                  ...profileWithResolvedType, 
                   id: `p${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, 
                   createdAt: new Date().toISOString(), 
                   brand: profBrand 
@@ -977,7 +950,7 @@ export const useStore = create<AppState>()(
               const newFilmItem: ProtectiveFilmItem = {
                   id: `pf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                   sNo: 0,
-                  series: profile.category || '80.5 SERIES',
+                  series: resolvedCategory || '80.5 SERIES',
                   description: profile.name,
                   profileCode: profile.sku,
                   packets: '',
@@ -997,7 +970,7 @@ export const useStore = create<AppState>()(
               };
               set(state => ({ 
                   profiles: [...state.profiles, newProfile],
-                  protectiveFilmItems: [...state.protectiveFilmItems, newFilmItem]
+                  protectiveFilmItems: (isMerged || isReinforcement) ? state.protectiveFilmItems : [...state.protectiveFilmItems, newFilmItem]
               }));
               resolvedProfile = newProfile;
           }
@@ -1010,7 +983,7 @@ export const useStore = create<AppState>()(
               (profile as any).stock || 
               0
           );
-          if (openingStock > 0) {
+          if (openingStock > 0 && !isMerged) {
               const existingTx = get().profileTransactions.find(t => 
                   t.profileId === resolvedProfile.id && 
                   t.refNo === `INIT-${resolvedProfile.sku}`
@@ -1035,26 +1008,327 @@ export const useStore = create<AppState>()(
               }
           }
 
-          // Auto-provision corresponding Extrusion Die if not existing
-          const existingDie = get().dies.find(d => 
-              !d.deletedAt && 
-              (d.profileId === resolvedProfile.id || d.dieNo.toLowerCase() === `die-${resolvedProfile.sku}`.toLowerCase())
-          );
-          if (!existingDie) {
-              const autoDie: Die = {
-                  id: `die_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                  dieNo: `DIE-${resolvedProfile.sku}`,
-                  profileId: resolvedProfile.id,
-                  brand: profBrand,
-                  cavities: resolvedProfile.piecesPerPacket && resolvedProfile.piecesPerPacket <= 4 ? 2 : 1,
-                  expectedOutputKgHr: 120,
-                  lifespanMeters: 50000,
-                  status: 'ACTIVE',
-                  createdAt: new Date().toISOString()
-              };
-              set(state => ({ dies: [...state.dies, autoDie] }));
+          // Auto-provision corresponding Extrusion Die if not existing (only for PVC window profiles)
+          if (!isMerged && resolvedProfile.sku?.trim() && !isReinforcement) {
+              const existingDie = get().dies.find(d => 
+                  !d.deletedAt && 
+                  (d.profileId === resolvedProfile.id || d.dieNo.toLowerCase() === `die-${resolvedProfile.sku}`.toLowerCase())
+              );
+              if (!existingDie) {
+                  const autoDie: Die = {
+                      id: `die_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                      dieNo: `DIE-${resolvedProfile.sku}`,
+                      profileId: resolvedProfile.id,
+                      brand: profBrand,
+                      cavities: resolvedProfile.piecesPerPacket && resolvedProfile.piecesPerPacket <= 4 ? 2 : 1,
+                      expectedOutputKgHr: 120,
+                      lifespanMeters: 50000,
+                      status: 'ACTIVE',
+                      createdAt: new Date().toISOString()
+                  };
+                  set(state => ({ dies: [...state.dies, autoDie] }));
+              }
           }
 
+          get().pushStandardCatalogueToAll();
+          return resolvedProfile;
+      },
+      addProfiles: (profilesList) => {
+          const state = get();
+          const currentBrands = [...(state.brands || [])];
+          let updatedProfiles = [...state.profiles];
+          let updatedFilms = [...state.protectiveFilmItems];
+          const newTransactions: ProfileTransaction[] = [];
+          const resolvedList: Profile[] = [];
+
+          profilesList.forEach((profile, idx) => {
+              const profBrand = (profile.brand || 'General').trim();
+              if (profBrand && !currentBrands.some(b => b.toLowerCase() === profBrand.toLowerCase())) {
+                  currentBrands.push(profBrand);
+              }
+
+              const isMerged = !!profile.isMerged;
+              const hasSku = !isMerged && !!profile.sku?.trim();
+              const isReinforcement = isReinforcementProfile(profile);
+
+              const resolvedType = isReinforcement ? 'REINFORCEMENT' : (profile.profileType || 'WINDOW');
+              const resolvedCategory = isReinforcement 
+                  ? (profile.category || 'GI Reinforcement') 
+                  : (profile.category || '80.5 SERIES');
+              const resolvedHsn = isReinforcement ? (profile.hsnCode || '72169910') : (profile.hsnCode || '39162099');
+
+              const profileWithResolvedType = {
+                  ...profile,
+                  profileType: resolvedType,
+                  category: resolvedCategory,
+                  hsnCode: resolvedHsn,
+                  brand: profBrand
+              };
+
+              const existingIdx = hasSku ? updatedProfiles.findIndex(p => 
+                  !p.isMerged &&
+                  p.sku.toLowerCase() === profile.sku.toLowerCase() && 
+                  (
+                      (p.brand || 'General').toLowerCase() === profBrand.toLowerCase() ||
+                      (isReinforcement && (
+                          p.profileType === 'REINFORCEMENT' || 
+                          (p.brand || '').toLowerCase() === 'reinforcement' ||
+                          (p.category || '').toLowerCase().includes('reinforce') ||
+                          (p.category || '').toLowerCase().includes('steel') ||
+                          (p.category || '').toLowerCase().includes('gi')
+                      ))
+                  )
+              ) : -1;
+
+              if (existingIdx >= 0) {
+                  const existing = updatedProfiles[existingIdx];
+                  const updated: Profile = {
+                      ...existing,
+                      ...profileWithResolvedType,
+                      id: existing.id,
+                      brand: profBrand,
+                      meterWeight: profile.meterWeight !== undefined ? profile.meterWeight : (existing as any).meterWeight
+                  };
+                  updatedProfiles[existingIdx] = updated;
+                  resolvedList.push(updated);
+              } else {
+                  const newProfile: Profile = {
+                      ...profileWithResolvedType,
+                      id: `p${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+                      createdAt: new Date().toISOString(),
+                      brand: profBrand
+                  };
+                  updatedProfiles.push(newProfile);
+                  resolvedList.push(newProfile);
+
+                  if (!isMerged && !isReinforcement && newProfile.sku?.trim()) {
+                      updatedFilms.push({
+                          id: `pf_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+                          sNo: updatedFilms.length + 1,
+                          series: resolvedCategory,
+                          description: profile.name,
+                          profileCode: profile.sku,
+                          packets: '',
+                          lengthsPerPacket: profile.piecesPerPacket || 6,
+                          eachLengthMtrs: profile.length || 5.9,
+                          meterWeight: profile.weight || 0,
+                          lengthWeightWithGasket: profile.weight || 0,
+                          topFilmWidth: profile.topFilmWidth || '38',
+                          topInwardMeters: 0,
+                          topMtrPerLength: profile.length || 5.9,
+                          topStickerName: profile.topStickerName || '',
+                          bottomFilmWidth: profile.bottomFilmWidth || '38',
+                          bottomInwardMeters: 0,
+                          bottomMtrPerLength: profile.length || 5.9,
+                          bottomStickerName: profile.bottomStickerName || '',
+                          brand: profBrand
+                      });
+                  }
+              }
+
+              const openingStock = Number(
+                  profile.openingStock || 
+                  (profile as any).currentStock || 
+                  (profile as any).initialStock || 
+                  (profile as any).stock || 
+                  0
+              );
+              if (openingStock > 0 && !isMerged && profile.sku?.trim()) {
+                  const targetId = resolvedList[resolvedList.length - 1].id;
+                  
+                  // Fix: Check if this profile already has an INIT transaction to prevent double data
+                  const hasInit = state.profileTransactions.some(t => 
+                      t.profileId === targetId && 
+                      (t.refNo === `INIT-${profile.sku}` || t.notes?.toLowerCase().includes('initial'))
+                  );
+
+                  if (!hasInit) {
+                      newTransactions.push({
+                          id: `pt_init_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+                          profileId: targetId,
+                          brand: profBrand,
+                          type: 'PRODUCTION',
+                          quantity: openingStock,
+                          piecesPerPacket: profile.piecesPerPacket || 1,
+                          weight: profile.weight || 0,
+                          unitPrice: profile.price || 0,
+                          date: new Date().toISOString(),
+                          status: 'COMPLETED',
+                          refNo: `INIT-${profile.sku}`,
+                          notes: 'Initial opening stock balance',
+                          createdAt: new Date().toISOString()
+                      });
+                  }
+              }
+          });
+
+          set(state => ({
+              brands: currentBrands,
+              profiles: updatedProfiles,
+              protectiveFilmItems: updatedFilms,
+              profileTransactions: newTransactions.length > 0 
+                  ? [...state.profileTransactions, ...newTransactions] 
+                  : state.profileTransactions
+          }));
+
+          get().pushStandardCatalogueToAll();
+          return resolvedList;
+      },
+      insertProfileAt: (profile, relativeId, position = 'below') => {
+          let updatedProfiles = [...get().profiles];
+          const isReinfItem = isReinforcementProfile(profile);
+          const profBrand = (profile.brand || 'General').trim();
+
+          // Auto-register brand if not present in brands list
+          const currentBrands = get().brands || [];
+          if (profBrand && profBrand !== 'All' && !currentBrands.some(b => b.toLowerCase() === profBrand.toLowerCase())) {
+              set({ brands: [...currentBrands, profBrand] });
+          }
+
+          const isMerged = !!profile.isMerged;
+          const hasSku = !isMerged && !!profile.sku?.trim();
+
+          const finalProfileType = isReinfItem ? 'REINFORCEMENT' : (profile.profileType || 'WINDOW');
+          const finalCategory = isReinfItem ? (profile.category || 'GI Reinforcement') : (profile.category || '80.5 SERIES');
+          const finalHsn = isReinfItem ? (profile.hsnCode || '72169910') : (profile.hsnCode || '39162099');
+
+          const existingIdx = hasSku ? updatedProfiles.findIndex(p => 
+              !p.isMerged &&
+              p.sku.toLowerCase() === profile.sku.toLowerCase() && 
+              (p.brand || 'General').toLowerCase() === profBrand.toLowerCase()
+          ) : -1;
+
+          let resolvedProfile: Profile;
+
+          if (existingIdx >= 0) {
+              const existing = updatedProfiles[existingIdx];
+              const updated = { 
+                  ...existing, 
+                  ...profile, 
+                  profileType: finalProfileType,
+                  category: finalCategory,
+                  hsnCode: finalHsn,
+                  id: existing.id, 
+                  brand: profBrand 
+              };
+              updatedProfiles[existingIdx] = updated;
+              
+              // Handle opening stock for existing profile if needed
+              const openingStock = Number((profile as any).openingStock || 0);
+              if (openingStock > 0 && !isMerged && profile.sku?.trim()) {
+                  const hasInit = get().profileTransactions.some(t => 
+                      t.profileId === existing.id && 
+                      (t.refNo === `INIT-${profile.sku}` || t.notes?.toLowerCase().includes('initial'))
+                  );
+                  if (!hasInit) {
+                      const newTx: ProfileTransaction = {
+                          id: `pt_init_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                          profileId: existing.id,
+                          brand: profBrand,
+                          type: 'PRODUCTION',
+                          quantity: openingStock,
+                          piecesPerPacket: profile.piecesPerPacket || existing.piecesPerPacket || 1,
+                          weight: profile.weight || existing.weight || 0,
+                          unitPrice: profile.price || existing.price || 0,
+                          date: new Date().toISOString(),
+                          status: 'COMPLETED',
+                          refNo: `INIT-${profile.sku}`,
+                          notes: 'Initial opening stock balance',
+                          createdAt: new Date().toISOString()
+                      };
+                      set(state => ({ 
+                          profiles: updatedProfiles,
+                          profileTransactions: [...state.profileTransactions, newTx]
+                      }));
+                  } else {
+                      set({ profiles: updatedProfiles });
+                  }
+              } else {
+                  set({ profiles: updatedProfiles });
+              }
+              
+              resolvedProfile = updated;
+          } else {
+              const newProfile: Profile = { 
+                  ...profile, 
+                  profileType: finalProfileType,
+                  category: finalCategory,
+                  hsnCode: finalHsn,
+                  id: `p${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, 
+                  createdAt: new Date().toISOString(), 
+                  brand: profBrand 
+              };
+
+              let insertIdx = updatedProfiles.length;
+              if (relativeId) {
+                  const targetIdx = updatedProfiles.findIndex(p => p.id === relativeId);
+                  if (targetIdx >= 0) {
+                      insertIdx = position === 'above' ? targetIdx : targetIdx + 1;
+                  }
+              } else if (position === 'above') {
+                  insertIdx = 0;
+              }
+              updatedProfiles.splice(insertIdx, 0, newProfile);
+
+              // Handle opening stock for new profile
+              const openingStock = Number((profile as any).openingStock || 0);
+              const newTransactions: ProfileTransaction[] = [];
+              if (openingStock > 0 && !isMerged && newProfile.sku?.trim()) {
+                  newTransactions.push({
+                      id: `pt_init_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                      profileId: newProfile.id,
+                      brand: profBrand,
+                      type: 'PRODUCTION',
+                      quantity: openingStock,
+                      piecesPerPacket: newProfile.piecesPerPacket || 1,
+                      weight: newProfile.weight || 0,
+                      unitPrice: newProfile.price || 0,
+                      date: new Date().toISOString(),
+                      status: 'COMPLETED',
+                      refNo: `INIT-${newProfile.sku}`,
+                      notes: 'Initial opening stock balance',
+                      createdAt: new Date().toISOString()
+                  });
+              }
+
+              if (!isMerged && newProfile.sku?.trim() && !isReinfItem) {
+                  const newFilmItem: ProtectiveFilmItem = {
+                      id: `pf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                      sNo: 0,
+                      series: newProfile.category || '80.5 SERIES',
+                      description: newProfile.name,
+                      profileCode: newProfile.sku,
+                      packets: '',
+                      lengthsPerPacket: newProfile.piecesPerPacket || 6,
+                      eachLengthMtrs: newProfile.length || 5.9,
+                      meterWeight: newProfile.weight || 0,
+                      lengthWeightWithGasket: newProfile.weight || 0,
+                      topFilmWidth: newProfile.topFilmWidth || '38',
+                      topInwardMeters: 0,
+                      topMtrPerLength: newProfile.length || 5.9,
+                      topStickerName: newProfile.topStickerName || '',
+                      bottomFilmWidth: newProfile.bottomFilmWidth || '38',
+                      bottomInwardMeters: 0,
+                      bottomMtrPerLength: newProfile.length || 5.9,
+                      bottomStickerName: newProfile.bottomStickerName || '',
+                      brand: profBrand
+                  };
+                  set(state => ({ 
+                      profiles: updatedProfiles,
+                      protectiveFilmItems: [...state.protectiveFilmItems, newFilmItem],
+                      profileTransactions: newTransactions.length > 0 ? [...state.profileTransactions, ...newTransactions] : state.profileTransactions
+                  }));
+              } else {
+                  set(state => ({ 
+                      profiles: updatedProfiles,
+                      profileTransactions: newTransactions.length > 0 ? [...state.profileTransactions, ...newTransactions] : state.profileTransactions
+                  }));
+              }
+
+              resolvedProfile = newProfile;
+          }
+
+          get().pushStandardCatalogueToAll();
           return resolvedProfile;
       },
       syncProfilesToStock: () => set(state => {
@@ -1064,15 +1338,67 @@ export const useStore = create<AppState>()(
 
           // Active profiles map
           const activeProfiles = state.profiles.filter(p => !p.deletedAt);
-          const activeSkusAndBrands = new Set(
-              activeProfiles.map(p => `${normSku(p.sku)}::${normBrand(p.brand)}`)
-          );
+          const nonMergedActiveProfiles = activeProfiles.filter(p => !p.isMerged && p.sku);
 
-          // 1. Update existing protective film items, remove items for deleted profiles
+          // Synchronize stock items (state.items) with active profiles
+          const seenItemSkus = new Set<string>();
+          const updatedStockItems: Item[] = (state.items || [])
+              .filter(item => {
+                  const skuNorm = normSku(item.sku);
+                  if (seenItemSkus.has(skuNorm)) return false;
+                  seenItemSkus.add(skuNorm);
+                  const matchingProfile = nonMergedActiveProfiles.find(p => normSku(p.sku) === skuNorm);
+                  const isDeletedProfile = state.profiles.some(p => p.deletedAt && normSku(p.sku) === skuNorm);
+                  return !isDeletedProfile || !!matchingProfile;
+              })
+              .map(item => {
+                  const skuNorm = normSku(item.sku);
+                  const matchingProfile = nonMergedActiveProfiles.find(p => normSku(p.sku) === skuNorm);
+                  if (matchingProfile) {
+                      return {
+                          ...item,
+                          sku: matchingProfile.sku,
+                          name: matchingProfile.name,
+                          category: matchingProfile.category || item.category || 'Windows & Doors',
+                          uom: matchingProfile.uom || item.uom || 'Pcs',
+                          reorderPoint: matchingProfile.reorderPoint !== undefined ? matchingProfile.reorderPoint : (item.reorderPoint || 50),
+                          costPrice: matchingProfile.price !== undefined ? matchingProfile.price : (item.costPrice || 150)
+                      };
+                  }
+                  return item;
+              });
+
+          const newStockItems: Item[] = [];
+          nonMergedActiveProfiles.forEach(p => {
+              const skuNorm = normSku(p.sku);
+              const exists = [...updatedStockItems, ...newStockItems].some(item => normSku(item.sku) === skuNorm);
+              if (!exists) {
+                  newStockItems.push({
+                      id: `i_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                      sku: p.sku,
+                      name: p.name,
+                      category: p.category || 'Windows & Doors',
+                      uom: p.uom || 'Pcs',
+                      reorderPoint: p.reorderPoint || 50,
+                      openingStock: 0,
+                      costPrice: p.price || 150,
+                      gstPercent: 18,
+                      createdAt: new Date().toISOString()
+                  });
+              }
+          });
+
+          // 1. Update existing protective film items, deduplicating them and removing items for deleted profiles
+          const seenFilmKeys = new Set<string>();
           const updatedItems: ProtectiveFilmItem[] = state.protectiveFilmItems
               .filter(item => {
                   const itemSkuNorm = normSku(item.profileCode);
                   const itemBrandNorm = normBrand(item.brand);
+                  const key = `${itemSkuNorm}::${itemBrandNorm}`;
+                  // Deduplicate: only take first occurrence of each SKU+Brand in protective films
+                  if (seenFilmKeys.has(key)) return false;
+                  seenFilmKeys.add(key);
+
                   // Keep item if it matches an active profile, or if it has no profile linked but is general
                   const hasMatchingProfile = activeProfiles.some(p => 
                       normSku(p.sku) === itemSkuNorm && 
@@ -1152,13 +1478,21 @@ export const useStore = create<AppState>()(
               }
           });
 
-          // 3. Ensure all active profiles have extrusion dies
+          // 3. Ensure all active profiles have extrusion dies, deduplicating existing dies
+          const seenDieKeys = new Set<string>();
+          const deduplicatedDies = state.dies.filter(d => {
+              if (d.deletedAt) return false;
+              const key = `${normSku(d.dieNo)}::${normBrand(d.brand)}`;
+              if (seenDieKeys.has(key)) return false;
+              seenDieKeys.add(key);
+              return true;
+          });
+
           const newDies: Die[] = [];
           activeProfiles.forEach(p => {
               const pBrand = p.brand || 'General';
               const pSkuNorm = normSku(p.sku);
-              const hasDie = state.dies.some(d => 
-                  !d.deletedAt && 
+              const hasDie = deduplicatedDies.some(d => 
                   (d.profileId === p.id || normSku(d.dieNo) === normSku(`DIE-${p.sku}`) || normSku(d.dieNo) === pSkuNorm)
               );
               if (!hasDie) {
@@ -1182,8 +1516,8 @@ export const useStore = create<AppState>()(
               ...activeProfiles.map(p => p.brand).filter(Boolean),
               ...updatedItems.map(f => f.brand).filter(Boolean),
               ...newItems.map(f => f.brand).filter(Boolean),
-              ...state.dies.filter(d => !d.deletedAt).map(d => d.brand).filter(Boolean),
-              'RAVIRAJA', 'Scraft', 'Smart'
+              ...deduplicatedDies.map(d => d.brand).filter(Boolean),
+              
           ] as string[]));
 
           const missingBrands = allExtractedBrands.filter(b => 
@@ -1191,11 +1525,98 @@ export const useStore = create<AppState>()(
           );
 
           return { 
+              items: [...updatedStockItems, ...newStockItems],
               protectiveFilmItems: [...updatedItems, ...newItems],
-              dies: newDies.length > 0 ? [...state.dies, ...newDies] : state.dies,
+              dies: newDies.length > 0 ? [...deduplicatedDies, ...newDies] : deduplicatedDies,
               brands: missingBrands.length > 0 ? [...currentBrands, ...missingBrands] : currentBrands
           };
       }),
+      syncProfileSpecsBySku: (sourceProfileId: string) => {
+          const state = get();
+          const source = state.profiles.find(p => p.id === sourceProfileId);
+          if (!source) return;
+
+          set(state => ({
+              profiles: state.profiles.map(p => {
+                  // Only sync profiles that have the same SKU and are NOT deleted, and NOT the source itself
+                  if (!p.deletedAt && p.sku === source.sku && p.id !== source.id) {
+                      return {
+                          ...p,
+                          name: source.name,
+                          category: source.category,
+                          profileType: source.profileType,
+                          length: source.length,
+                          weight: source.weight,
+                          piecesPerPacket: source.piecesPerPacket,
+                          price: source.price,
+                          reorderPoint: source.reorderPoint,
+                          size: source.size,
+                          color: source.color,
+                          hsnCode: source.hsnCode,
+                          topFilmWidth: source.topFilmWidth,
+                          bottomFilmWidth: source.bottomFilmWidth
+                      };
+                  }
+                  return p;
+              })
+          }));
+          
+          // After syncing profiles, ensure film items are also updated to match
+          get().syncProfilesToStock();
+      },
+      deduplicateProfiles: () => {
+          let removedCount = 0;
+          set(state => {
+              const seen = new Set<string>();
+              const cleanedProfiles: Profile[] = [];
+              const duplicateIds = new Set<string>();
+
+              state.profiles.forEach(p => {
+                  if (p.isMerged) {
+                      cleanedProfiles.push(p);
+                      return;
+                  }
+                  const skuNorm = (p.sku || '').trim().toLowerCase();
+                  const brandNorm = (p.brand || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
+                  const key = `${skuNorm}::${brandNorm}`;
+
+                  if (!skuNorm || p.deletedAt) {
+                      cleanedProfiles.push(p);
+                      return;
+                  }
+
+                  if (seen.has(key)) {
+                      duplicateIds.add(p.id);
+                  } else {
+                      seen.add(key);
+                      cleanedProfiles.push(p);
+                  }
+              });
+
+              removedCount = duplicateIds.size;
+              if (removedCount === 0) return state;
+
+              // Re-point transactions of duplicates to primary profile
+              const updatedTransactions = state.profileTransactions.map(t => {
+                  if (duplicateIds.has(t.profileId)) {
+                      const primary = cleanedProfiles.find(cp => 
+                          (cp.sku || '').trim().toLowerCase() === (t.profileSkuOverride || '').trim().toLowerCase()
+                      );
+                      if (primary) {
+                          return { ...t, profileId: primary.id };
+                      }
+                  }
+                  return t;
+              });
+
+              return {
+                  profiles: cleanedProfiles,
+                  dies: state.dies.filter(d => !duplicateIds.has(d.profileId || '')),
+                  profileTransactions: updatedTransactions
+              };
+          });
+          return removedCount;
+      },
       syncBrandDataToAllTabs: (targetBrand?: string) => {
           get().syncProfilesToStock();
           const state = get();
@@ -1218,83 +1639,318 @@ export const useStore = create<AppState>()(
               brand: target || 'All'
           };
       },
-      updateProfile: (profile) => set(state => {
-          const oldProfile = state.profiles.find(p => p.id === profile.id);
-          const brandChanged = oldProfile?.brand !== profile.brand;
+      pushStandardCatalogueToAll: (sourceBrand?: string) => {
+          const state = get();
+          const normBrand = (b?: string | null) => (b || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
+          const normSku = (s?: string | null) => (s || '').trim().toLowerCase();
+
+          // 1. Identify all active profiles and master specifications, including merged rows
+          const activeProfiles = state.profiles.filter(p => !p.deletedAt);
+          const skuSpecMap = new Map<string, Profile>();
+          const mergedSpecMap = new Map<string, Profile>();
+          
+          // First fill with all active profiles
+          activeProfiles.forEach(p => {
+              if (p.isMerged && p.mergedText?.trim()) {
+                  const key = p.mergedText.trim().toLowerCase();
+                  if (!mergedSpecMap.has(key)) mergedSpecMap.set(key, p);
+              } else if (p.sku?.trim()) {
+                  const sku = normSku(p.sku);
+                  if (!skuSpecMap.has(sku)) skuSpecMap.set(sku, p);
+              }
+          });
+          
+          // If sourceBrand specified, override with sourceBrand specs
+          if (sourceBrand && sourceBrand !== 'All') {
+              activeProfiles.forEach(p => {
+                  if (normBrand(p.brand) === normBrand(sourceBrand)) {
+                      if (p.isMerged && p.mergedText?.trim()) {
+                          mergedSpecMap.set(p.mergedText.trim().toLowerCase(), p);
+                      } else if (p.sku?.trim()) {
+                          skuSpecMap.set(normSku(p.sku), p);
+                      }
+                  }
+              });
+          }
+
+          // 2. Determine all registered brands
+          const allBrands = Array.from(new Set([
+              ...(state.brands || []),
+              ...activeProfiles.map(p => p.brand).filter(Boolean)
+          ])).filter(b => b && b !== 'All');
+
+          let syncedProfilesCount = 0;
+          let newProfilesAdded = 0;
+
+          // 3. Update existing profiles with matching SKU or Merged Text across all brands
+          let updatedProfiles = state.profiles.map(p => {
+              if (p.deletedAt) return p;
+              
+              let std: Profile | undefined;
+              if (p.isMerged && p.mergedText?.trim()) {
+                  std = mergedSpecMap.get(p.mergedText.trim().toLowerCase());
+              } else if (p.sku?.trim()) {
+                  std = skuSpecMap.get(normSku(p.sku));
+              }
+              
+              if (!std) return p;
+
+              syncedProfilesCount++;
+              return {
+                  ...p,
+                  name: std.name || p.name,
+                  category: std.category || p.category,
+                  profileType: std.profileType || p.profileType,
+                  length: std.length !== undefined ? std.length : p.length,
+                  weight: std.weight !== undefined ? std.weight : p.weight,
+                  meterWeight: std.meterWeight !== undefined ? std.meterWeight : p.meterWeight,
+                  piecesPerPacket: std.piecesPerPacket !== undefined ? std.piecesPerPacket : p.piecesPerPacket,
+                  price: std.price !== undefined ? std.price : p.price,
+                  reorderPoint: std.reorderPoint !== undefined ? std.reorderPoint : p.reorderPoint,
+                  size: std.size || p.size,
+                  color: std.color || p.color,
+                  hsnCode: std.hsnCode || p.hsnCode,
+                  topFilmWidth: std.topFilmWidth !== undefined ? std.topFilmWidth : p.topFilmWidth,
+                  bottomFilmWidth: std.bottomFilmWidth !== undefined ? std.bottomFilmWidth : p.bottomFilmWidth,
+                  topStickerName: std.topStickerName !== undefined ? std.topStickerName : p.topStickerName,
+                  bottomStickerName: std.bottomStickerName !== undefined ? std.bottomStickerName : p.bottomStickerName,
+                  mergedAlign: std.mergedAlign || p.mergedAlign,
+                  mergedBg: std.mergedBg || p.mergedBg,
+                  isMerged: std.isMerged !== undefined ? std.isMerged : p.isMerged
+              };
+          });
+
+          set({ profiles: updatedProfiles });
+
+          // 5. Trigger full sync to stock, protective films and dies
+          get().syncProfilesToStock();
+
+          const finalFilmsCount = get().protectiveFilmItems.length;
+
+          return {
+              syncedProfiles: syncedProfilesCount + newProfilesAdded,
+              syncedFilms: finalFilmsCount,
+              syncedBrands: allBrands.length
+          };
+      },
+      updateProfile: (profile) => {
+          const oldProfile = get().profiles.find(p => p.id === profile.id);
           const oldSku = oldProfile?.sku?.trim().toLowerCase();
           const newSku = profile.sku?.trim().toLowerCase();
           const normBrand = (b?: string | null) => (b || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
           const oldBrandNorm = normBrand(oldProfile?.brand);
+          const newBrandNorm = normBrand(profile.brand);
 
-          const updatedFilms = state.protectiveFilmItems.map(f => {
-              const fSku = (f.profileCode || '').trim().toLowerCase();
-              const fBrandNorm = normBrand(f.brand);
-              if ((fSku === oldSku || fSku === newSku) && (fBrandNorm === oldBrandNorm || !f.brand || f.brand === 'General')) {
-                  return {
-                      ...f,
+          set(state => {
+              let matchedFilm = false;
+              const updatedFilms = state.protectiveFilmItems.map(f => {
+                  const fSku = (f.profileCode || '').trim().toLowerCase();
+                  const fBrandNorm = normBrand(f.brand);
+                  if ((fSku === oldSku || fSku === newSku) && (fBrandNorm === oldBrandNorm || fBrandNorm === newBrandNorm || !f.brand || f.brand === 'General')) {
+                      matchedFilm = true;
+                      return {
+                          ...f,
+                          profileCode: profile.sku,
+                          brand: profile.brand,
+                          description: profile.name || f.description,
+                          series: profile.category || f.series,
+                          lengthsPerPacket: profile.piecesPerPacket || f.lengthsPerPacket,
+                          eachLengthMtrs: profile.length || f.eachLengthMtrs,
+                          meterWeight: profile.weight || f.meterWeight,
+                          topFilmWidth: profile.topFilmWidth !== undefined ? profile.topFilmWidth : f.topFilmWidth,
+                          topStickerName: profile.topStickerName !== undefined ? profile.topStickerName : f.topStickerName,
+                          bottomFilmWidth: profile.bottomFilmWidth !== undefined ? profile.bottomFilmWidth : f.bottomFilmWidth,
+                          bottomStickerName: profile.bottomStickerName !== undefined ? profile.bottomStickerName : f.bottomStickerName,
+                      };
+                  }
+                  return f;
+              });
+
+              if (!matchedFilm && !profile.isMerged && profile.sku?.trim()) {
+                  updatedFilms.push({
+                      id: `pf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                      sNo: updatedFilms.length + 1,
+                      series: profile.category || '80.5 SERIES',
+                      description: profile.name,
                       profileCode: profile.sku,
-                      brand: profile.brand,
-                      description: profile.name || f.description,
-                      series: profile.category || f.series,
-                      lengthsPerPacket: profile.piecesPerPacket || f.lengthsPerPacket,
-                      eachLengthMtrs: profile.length || f.eachLengthMtrs,
-                      meterWeight: profile.weight || f.meterWeight,
-                      topFilmWidth: profile.topFilmWidth !== undefined ? profile.topFilmWidth : f.topFilmWidth,
-                      topStickerName: profile.topStickerName !== undefined ? profile.topStickerName : f.topStickerName,
-                      bottomFilmWidth: profile.bottomFilmWidth !== undefined ? profile.bottomFilmWidth : f.bottomFilmWidth,
-                      bottomStickerName: profile.bottomStickerName !== undefined ? profile.bottomStickerName : f.bottomStickerName,
-                  };
+                      packets: '',
+                      lengthsPerPacket: profile.piecesPerPacket || 6,
+                      eachLengthMtrs: profile.length || 5.9,
+                      meterWeight: profile.weight || 0,
+                      lengthWeightWithGasket: profile.weight || 0,
+                      topFilmWidth: profile.topFilmWidth || '38',
+                      topInwardMeters: 5000,
+                      topMtrPerLength: profile.length || 5.9,
+                      topStickerName: profile.topStickerName || `${profile.brand || 'General'} Top Film`,
+                      bottomFilmWidth: profile.bottomFilmWidth || '38',
+                      bottomInwardMeters: 5000,
+                      bottomMtrPerLength: profile.length || 5.9,
+                      bottomStickerName: profile.bottomStickerName || `${profile.brand || 'General'} Bottom Film`,
+                      brand: profile.brand || 'General'
+                  });
               }
-              return f;
+
+              // Update Data Plan rows if product name matches
+              const oldName = (oldProfile?.name || '').trim().toLowerCase();
+              const updatedDataPlanRows = (state.dataPlanSheet?.rows || []).map(r => {
+                  const rProd = (r.product || '').trim().toLowerCase();
+                  if (oldName && rProd === oldName) {
+                      return { ...r, product: profile.name };
+                  }
+                  return r;
+              });
+
+              const innerNormSku = (s?: string | null) => (s || '').trim().toLowerCase().replace(/[\s_-]/g, '');
+
+              return {
+                  profiles: state.profiles.map(p => p.id === profile.id ? profile : p),
+                  protectiveFilmItems: updatedFilms,
+                  dies: state.dies.map(d => (d.profileId === profile.id || (oldSku && innerNormSku(d.dieNo) === `die-${oldSku}`)) ? { 
+                      ...d, 
+                      dieNo: `DIE-${profile.sku}`,
+                      brand: profile.brand 
+                  } : d),
+                  profileTransactions: state.profileTransactions.map(t => t.profileId === profile.id ? { 
+                      ...t, 
+                      brand: profile.brand,
+                      profileNameOverride: profile.name,
+                      profileSkuOverride: profile.sku 
+                  } : t),
+                  dataPlanSheet: {
+                      ...state.dataPlanSheet,
+                      rows: updatedDataPlanRows
+                  }
+              };
           });
-          return {
-              profiles: state.profiles.map(p => p.id === profile.id ? profile : p),
-              protectiveFilmItems: updatedFilms,
-              dies: state.dies.map(d => d.profileId === profile.id ? { ...d, brand: profile.brand } : d),
-              ...(brandChanged ? {
-                  profileTransactions: state.profileTransactions.map(t => t.profileId === profile.id ? { ...t, brand: profile.brand } : t),
-              } : {})
-          };
-      }),
+          get().pushStandardCatalogueToAll();
+      },
       deleteProfile: (id) => set(state => {
           const target = state.profiles.find(p => p.id === id);
           const skuNorm = (target?.sku || '').trim().toLowerCase();
-          const brandNorm = (target?.brand || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
           const normB = (b?: string | null) => (b || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
+          const brandNorm = normB(target?.brand);
+          const targetNameNorm = (target?.name || '').trim().toLowerCase();
+          const nowIso = new Date().toISOString();
+
+          // Check if any OTHER active profile still has this SKU & Brand
+          const hasOtherSameSku = state.profiles.some(p => 
+              p.id !== id && !p.deletedAt && 
+              (p.sku || '').trim().toLowerCase() === skuNorm && 
+              normB(p.brand) === brandNorm
+          );
+
+          const hasOtherSameSkuActive = state.profiles.some(p => 
+              p.id !== id && !p.deletedAt && 
+              (p.sku || '').trim().toLowerCase() === skuNorm
+          );
+
+          const linkedDieIds = new Set(state.dies.filter(d => d.profileId === id).map(d => d.id));
 
           return {
-              profiles: state.profiles.map(p => p.id === id ? { ...p, deletedAt: new Date().toISOString() } : p),
-              protectiveFilmItems: state.protectiveFilmItems.filter(f => {
-                  if (skuNorm && (f.profileCode || '').trim().toLowerCase() === skuNorm && normB(f.brand) === brandNorm) {
-                      return false;
-                  }
-                  return true;
+              // 1. Mark profile deleted
+              profiles: state.profiles.map(p => p.id === id ? { ...p, deletedAt: nowIso } : p),
+              // 2. Remove protective film items if no other active profile shares this SKU+Brand
+              protectiveFilmItems: hasOtherSameSku ? state.protectiveFilmItems : state.protectiveFilmItems.filter(f => {
+                  const fSku = (f.profileCode || '').trim().toLowerCase();
+                  const fBrand = normB(f.brand);
+                  return !(skuNorm && fSku === skuNorm && fBrand === brandNorm);
               }),
-              dies: state.dies.map(d => d.profileId === id ? { ...d, deletedAt: new Date().toISOString() } : d),
-              profileTransactions: state.profileTransactions.map(t => t.profileId === id ? { ...t, deletedAt: new Date().toISOString() } : t)
+              // 3. Mark stock items deleted if no other active profile shares this SKU
+              items: hasOtherSameSkuActive ? state.items : state.items.map(i => (i.sku || '').trim().toLowerCase() === skuNorm ? { ...i, deletedAt: nowIso } : i),
+              // 4. Mark dies deleted
+              dies: state.dies.map(d => (d.profileId === id || (!hasOtherSameSku && skuNorm && (d.dieNo || '').trim().toLowerCase() === `die-${skuNorm}`)) ? { ...d, deletedAt: nowIso } : d),
+              // 5. Mark profile transactions deleted (Stock, Quotations, Inflows, Scrap)
+              profileTransactions: state.profileTransactions.map(t => t.profileId === id ? { ...t, deletedAt: nowIso } : t),
+              // 6. Remove from Data Plan Sheet rows so it is immediately not seen
+              dataPlanSheet: {
+                  ...state.dataPlanSheet,
+                  rows: (state.dataPlanSheet?.rows || []).filter(r => {
+                      const rProd = (r.product || '').trim().toLowerCase();
+                      if (r.id?.includes(id)) return false;
+                      if (targetNameNorm && rProd === targetNameNorm) return false;
+                      if (skuNorm && rProd === skuNorm) return false;
+                      return true;
+                  })
+              },
+              // 7. Mark production plans linked to this profile's dies deleted
+              productionPlans: state.productionPlans.map(p => 
+                  (p.dieId && linkedDieIds.has(p.dieId)) || (p.dieIds && p.dieIds.some(dId => linkedDieIds.has(dId)))
+                      ? { ...p, deletedAt: nowIso }
+                      : p
+              )
           };
       }),
-      restoreProfile: (id) => set(state => ({
-          profiles: state.profiles.map(p => p.id === id ? { ...p, deletedAt: null } : p),
-          dies: state.dies.map(d => d.profileId === id ? { ...d, deletedAt: null } : d),
-          profileTransactions: state.profileTransactions.map(t => t.profileId === id ? { ...t, deletedAt: null } : t)
-      })),
+      restoreProfile: (id) => set(state => {
+          const linkedDieIds = new Set(state.dies.filter(d => d.profileId === id).map(d => d.id));
+          const target = state.profiles.find(p => p.id === id);
+          const skuNorm = (target?.sku || '').trim().toLowerCase();
+          return {
+              profiles: state.profiles.map(p => p.id === id ? { ...p, deletedAt: null } : p),
+              items: state.items.map(i => (skuNorm && (i.sku || '').trim().toLowerCase() === skuNorm) ? { ...i, deletedAt: null } : i),
+              dies: state.dies.map(d => d.profileId === id ? { ...d, deletedAt: null } : d),
+              profileTransactions: state.profileTransactions.map(t => t.profileId === id ? { ...t, deletedAt: null } : t),
+              productionPlans: state.productionPlans.map(p => 
+                  (p.dieId && linkedDieIds.has(p.dieId)) || (p.dieIds && p.dieIds.some(dId => linkedDieIds.has(dId)))
+                      ? { ...p, deletedAt: null }
+                      : p
+              )
+          };
+      }),
       permanentlyDeleteProfile: (id) => set(state => {
           const target = state.profiles.find(p => p.id === id);
           const skuNorm = (target?.sku || '').trim().toLowerCase();
           const normB = (b?: string | null) => (b || 'General').trim().toLowerCase().replace(/[\s_-]/g, '');
           const brandNorm = normB(target?.brand);
+          const targetNameNorm = (target?.name || '').trim().toLowerCase();
+
+          // Check if any OTHER active profile still has this SKU & Brand
+          const hasOtherSameSku = state.profiles.some(p => 
+              p.id !== id && !p.deletedAt && 
+              (p.sku || '').trim().toLowerCase() === skuNorm && 
+              normB(p.brand) === brandNorm
+          );
+
+          const hasOtherSameSkuActive = state.profiles.some(p => 
+              p.id !== id && !p.deletedAt && 
+              (p.sku || '').trim().toLowerCase() === skuNorm
+          );
+
+          const linkedDieIds = new Set(state.dies.filter(d => d.profileId === id).map(d => d.id));
 
           return {
+              // 1. Completely eradicate from profiles
               profiles: state.profiles.filter(p => p.id !== id),
-              protectiveFilmItems: state.protectiveFilmItems.filter(f => {
-                  if (skuNorm && (f.profileCode || '').trim().toLowerCase() === skuNorm && normB(f.brand) === brandNorm) {
-                      return false;
-                  }
+              // 2. Completely eradicate protective films
+              protectiveFilmItems: hasOtherSameSku ? state.protectiveFilmItems : state.protectiveFilmItems.filter(f => {
+                  const fSku = (f.profileCode || '').trim().toLowerCase();
+                  const fBrand = normB(f.brand);
+                  return !(skuNorm && fSku === skuNorm && fBrand === brandNorm);
+              }),
+              // 3. Completely eradicate stock items if no other active profile shares this SKU
+              items: hasOtherSameSkuActive ? state.items : state.items.filter(i => (i.sku || '').trim().toLowerCase() !== skuNorm),
+              // 4. Completely eradicate dies
+              dies: state.dies.filter(d => {
+                  if (d.profileId === id) return false;
+                  if (!hasOtherSameSku && skuNorm && (d.dieNo || '').trim().toLowerCase() === `die-${skuNorm}`) return false;
                   return true;
               }),
-              dies: state.dies.filter(d => d.profileId !== id),
-              profileTransactions: state.profileTransactions.filter(t => t.profileId !== id)
+              // 5. Completely eradicate all transactions (Stock, Quotations, Inflows, Scrap)
+              profileTransactions: state.profileTransactions.filter(t => t.profileId !== id),
+              // 6. Completely eradicate from Data Plan Sheet rows
+              dataPlanSheet: {
+                  ...state.dataPlanSheet,
+                  rows: (state.dataPlanSheet?.rows || []).filter(r => {
+                      const rProd = (r.product || '').trim().toLowerCase();
+                      if (r.id?.includes(id)) return false;
+                      if (targetNameNorm && rProd === targetNameNorm) return false;
+                      if (skuNorm && rProd === skuNorm) return false;
+                      return true;
+                  })
+              },
+              // 7. Completely eradicate from production plans
+              productionPlans: state.productionPlans.filter(p => 
+                  !( (p.dieId && linkedDieIds.has(p.dieId)) || (p.dieIds && p.dieIds.some(dId => linkedDieIds.has(dId))) )
+              )
           };
       }),
 
@@ -1403,6 +2059,22 @@ export const useStore = create<AppState>()(
       updateCompanySettings: (settings) => set({ companySettings: settings }),
       setInflowFilters: (filters) => set(state => ({ uiState: { ...state.uiState, inflowFilters: filters } })),
       setConsumptionFilters: (filters) => set(state => ({ uiState: { ...state.uiState, consumptionFilters: filters } })),
+      resetCatalogueAndQuotations: () => set({
+        profiles: [],
+        profileTransactions: [],
+        brands: [],
+        dies: [],
+        productionPlans: [],
+        protectiveFilmItems: DEFAULT_PROTECTIVE_FILM_ITEMS,
+        protectiveFilmInwardTransactions: [],
+        protectiveFilmOutwardAdjustments: [],
+        dataPlanSheet: {
+          columns: INITIAL_DATA_PLAN_COLUMNS,
+          rows: INITIAL_DATA_PLAN_ROWS,
+          selectedBrandFilter: 'ALL',
+          lastSaved: new Date().toISOString()
+        }
+      }),
       setProfileFilters: (filters) => set(state => ({ uiState: { ...state.uiState, profileFilters: filters } })),
       saveProfileFilterPreset: (name, filters) => set(state => ({
           uiState: {
@@ -1437,6 +2109,20 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'erp-inventory-hub-storage',
+      version: 3,
+      migrate: (persistedState: any, version: number) => {
+        if (version < 3) {
+          return {
+            ...persistedState,
+            profiles: [],
+            profileTransactions: [],
+            dies: [],
+            productionPlans: [],
+            protectiveFilmItems: [],
+          };
+        }
+        return persistedState;
+      },
       storage: createJSONStorage(() => safeLocalStorage),
       partialize: (state) => {
         const { uiState, securityAuditLogs, ...rest } = state;

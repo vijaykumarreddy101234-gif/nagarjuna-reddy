@@ -14,15 +14,15 @@ interface EditUserModalProps {
 
 const ROLE_DEFAULT_PAGES: Record<Role, string[]> = {
     ADMIN: [...ALL_SYSTEM_PAGES],
-    STORE_MANAGER: ['Dashboard', 'Store Management', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel'],
-    PURCHASE: ['Dashboard', 'Store Management', 'Quotations & Sales', 'Reports & History'],
+    STORE_MANAGER: ['Dashboard', 'RM Section', 'Profiles & Stock', 'Protective Films', 'Reports & History', 'Import Excel'],
+    PURCHASE: ['Dashboard', 'RM Section', 'Quotations & Sales', 'Reports & History'],
     SALES: ['Dashboard', 'Profiles & Stock', 'Quotations & Sales', 'Shipments', 'Reports & History'],
     MANAGEMENT: ['Dashboard', 'Profiles & Stock', 'Dies & Planning', 'Production', 'Protective Films', 'Reports & History', 'Quotations & Sales'],
     SECURITY: ['Dashboard', 'Reports & History'],
-    VIEWER: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'Store Management']
+    VIEWER: ['Dashboard', 'Reports & History', 'Profiles & Stock', 'RM Section']
 };
 
-export const EditUserModal: React.FC<EditUserModalProps> = ({ 
+export const EditUserModal = ({ 
     isOpen, 
     user, 
     onClose, 
@@ -210,7 +210,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
                                 >
                                     <option value="ADMIN">ADMIN (Full Control)</option>
-                                    <option value="STORE_MANAGER">STORE_MANAGER (Raw Material & Store)</option>
+                                    <option value="STORE_MANAGER">STORE_MANAGER (Raw Material & RM Section)</option>
                                     <option value="PURCHASE">PURCHASE (Orders & Procurement)</option>
                                     <option value="SALES">SALES (Quotations & Dispatches)</option>
                                     <option value="MANAGEMENT">MANAGEMENT (Production Planning)</option>

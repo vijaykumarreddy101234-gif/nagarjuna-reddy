@@ -7,7 +7,7 @@ interface ProfileDailyReportProps {
     brandFilter: string;
 }
 
-const ProfileDailyReport: React.FC<ProfileDailyReportProps> = ({ profiles, transactions, brandFilter }) => {
+const ProfileDailyReport = ({ profiles, transactions, brandFilter }) => {
     const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
     const reportData = useMemo(() => {

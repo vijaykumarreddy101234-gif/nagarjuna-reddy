@@ -49,13 +49,13 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                 )}
             </thead>
             <tbody className="divide-y dark:divide-gray-700 text-[11px]">
-                {transactions.map((t) => {
+                {transactions.map((t, idx) => {
                     const profile = getProfile(t.profileId);
                     const isPositive = t.type === 'PRODUCTION' || t.type === 'RETURN';
                     
                     if (isMovementView) {
                         return (
-                            <tr key={t.id} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200">
+                            <tr key={`${t.id || idx}_${idx}`} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200">
                                 <td className="px-6 py-4 font-bold text-gray-500">
                                     {new Date(t.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                                 </td>
@@ -96,7 +96,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                     }
 
                     return (
-                        <tr key={t.id} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200">
+                        <tr key={`${t.id || idx}_${idx}`} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200">
                             <td className="px-6 py-4">{getBrandBadge(t.brand || profile?.brand)}</td>
                             <td className="px-6 py-4">
                                 <div className="flex flex-col">
@@ -133,7 +133,35 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
     </div>
 );
 
-export const TransactionModal: React.FC<any> = ({ isOpen, onClose, type, profiles, brands, onAdd, addToast, customers, filterType, initialProfileId, initialBrand, onAddNewProfile }) => {
+interface TransactionModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    type: 'PRODUCTION' | 'DISPATCH' | 'SCRAP' | 'QUOTATION' | 'RETURN';
+    profiles: Profile[];
+    brands: string[];
+    onAdd: (tx: any) => void;
+    addToast: (msg: string, type: ToastMessage['type']) => void;
+    customers?: Customer[];
+    filterType?: string | null;
+    initialProfileId?: string | null;
+    initialBrand?: string | null;
+    onAddNewProfile?: () => void;
+}
+
+export const TransactionModal: React.FC<TransactionModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    type, 
+    profiles, 
+    brands, 
+    onAdd, 
+    addToast, 
+    customers, 
+    filterType, 
+    initialProfileId, 
+    initialBrand, 
+    onAddNewProfile 
+}) => {
     const [form, setForm] = useState({ profileId: '', quantity: '', uom: 'Pcs', refNo: '', date: new Date().toISOString().split('T')[0], customer: '', customerAddress: '', customerGST: '', customerPhone: '', machine: '', die: '', brand: '' });
     const [modalBrandFilter, setModalBrandFilter] = useState('All');
     const [customerSearch, setCustomerSearch] = useState('');
@@ -245,6 +273,16 @@ export const TransactionModal: React.FC<any> = ({ isOpen, onClose, type, profile
                                     </button>
                                 )}
                             </div>
+                            {form.profileId && (() => {
+                                const selectedProfile = profiles.find((x:any) => x.id === form.profileId);
+                                if (!selectedProfile) return null;
+                                return (
+                                    <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-900/50 flex justify-between items-center font-semibold">
+                                        <span>Opening Balance: <strong>{Number(selectedProfile.openingStock || (selectedProfile as any).initialStock || 0).toLocaleString()} {selectedProfile.uom || 'Pcs'}</strong></span>
+                                        {selectedProfile.price && <span>Rate: <strong>₹{Number(selectedProfile.price).toFixed(2)}</strong></span>}
+                                    </div>
+                                );
+                            })()}
                         </div>
                         <div>
                             <label className="text-xs font-bold uppercase text-gray-500 mb-1 block">Ref No</label>
@@ -298,7 +336,7 @@ export const TransactionModal: React.FC<any> = ({ isOpen, onClose, type, profile
     );
 };
 
-export const EditTransactionModal: React.FC<any> = ({ isOpen, onClose, transaction, onUpdate }) => {
+export const EditTransactionModal = ({ isOpen, onClose, transaction, onUpdate }) => {
     const [form, setForm] = useState({ quantity: '', refNo: '', date: '' });
 
     useEffect(() => {

@@ -4,7 +4,7 @@ interface MarkdownRendererProps {
   content: string;
 }
 
-const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
+const MarkdownRenderer = ({ content }) => {
   const renderContent = () => {
     if (!content) return [];
     const lines = content.split('\n');

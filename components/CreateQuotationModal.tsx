@@ -33,11 +33,11 @@ interface QuotationItem {
     brand?: string; 
 }
 
-const Portal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const Portal = ({ children }) => {
     return createPortal(children, document.body);
 };
 
-const CreateQuotationModal: React.FC<CreateQuotationModalProps> = ({ isOpen, onClose, profiles, customers, onAddMultiple, addCustomer, addToast, existingTransactions, brands, addBrand, deleteBrand, companySettings }) => {
+const CreateQuotationModal = ({ isOpen, onClose, profiles, customers, onAddMultiple, addCustomer, addToast, existingTransactions, brands, addBrand, deleteBrand, companySettings }) => {
     const [invoiceData, setInvoiceData] = useState<InvoiceDetails>({
         category: 'Tax Invoice', reverseCharge: 'No', documentType: 'Tax Invoice', documentNo: '',
         documentDate: new Date().toISOString().split('T')[0], legalName: '', address1: '', address2: '', location: '', pincode: '', phone: '',
@@ -306,7 +306,7 @@ const CreateQuotationModal: React.FC<CreateQuotationModalProps> = ({ isOpen, onC
     );
 };
 
-const ManageBrandsSubModal: React.FC<any> = ({ isOpen, onClose, brands, addBrand, deleteBrand, addToast }) => {
+const ManageBrandsSubModal = ({ isOpen, onClose, brands, addBrand, deleteBrand, addToast }) => {
     const [newB, setNewB] = useState('');
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 

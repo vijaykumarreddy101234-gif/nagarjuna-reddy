@@ -177,6 +177,18 @@ export interface Profile {
     openingStock?: number;
     createdAt: string;
     deletedAt?: string | null;
+    isMerged?: boolean;
+    mergedText?: string;
+    mergedAlign?: 'left' | 'center' | 'right' | string;
+    mergedBg?: 'gray' | 'yellow' | 'blue' | 'green' | 'white' | string;
+    isHidden?: boolean;
+    customFields?: Record<string, string | number>;
+}
+
+export interface CustomColumn {
+    id: string;
+    name: string;
+    insertAfter: string;
 }
 
 export interface InvoiceDetails {

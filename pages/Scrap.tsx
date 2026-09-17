@@ -10,7 +10,7 @@ interface ScrapProps {
     addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const Scrap: React.FC<ScrapProps> = ({ addToast }) => {
+const Scrap = ({ addToast }) => {
     const profileTransactions = useStore(state => state.profileTransactions);
     const profiles = useStore(state => state.profiles);
     const deleteProfileTransaction = useStore(state => state.deleteProfileTransaction);

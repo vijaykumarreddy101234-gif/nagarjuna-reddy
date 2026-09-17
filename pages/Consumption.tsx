@@ -25,7 +25,7 @@ interface ConsumptionProps {
 
 type ConsumptionTab = 'log' | 'formula';
 
-const Consumption: React.FC<ConsumptionProps> = (props) => {
+const Consumption = (props) => {
     const savedFilters = useStore(state => state.uiState.consumptionFilters);
     const saveFiltersAction = useStore(state => state.setConsumptionFilters);
 

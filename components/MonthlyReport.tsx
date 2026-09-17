@@ -12,7 +12,7 @@ interface MonthlyReportProps {
     timeFilter: TimeFilter;
 }
 
-const MonthlyReport: React.FC<MonthlyReportProps> = ({ items, inflow, consumption, reportCorrections, timeFilter }) => {
+const MonthlyReport = ({ items, inflow, consumption, reportCorrections, timeFilter }) => {
     
     const reportData = useMemo(() => {
         const now = new Date();

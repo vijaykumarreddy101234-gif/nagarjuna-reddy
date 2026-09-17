@@ -7,7 +7,7 @@ import { Plus, Trash2, Shield, User as UserIcon, Lock, Check, X } from 'lucide-r
 
 const ALL_PAGES: Page[] = [
     'Dashboard',
-    'Store Management',
+    'RM Section',
     'Profiles & Stock',
     'Dies & Planning',
     'Reports & History',
@@ -23,7 +23,7 @@ interface SettingsProps {
     addToast: (message: string, type: ToastMessage['type']) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ addToast }) => {
+const Settings = ({ addToast }) => {
     const currentUser = useStore(state => state.currentUser);
     const appUsers = useStore(state => state.appUsers);
     const systemSettings = useStore(state => state.systemSettings);
@@ -274,8 +274,31 @@ const Settings: React.FC<SettingsProps> = ({ addToast }) => {
                                 <p className="text-[10px] font-bold text-primary-500 leading-relaxed uppercase tracking-tight">
                                     System is operating under strict AES-256 cloud encryption protocols.
                                 </p>
-                            </div>
+                             </div>
                         </div>
+                    </Card>
+
+                    <Card className="p-6 bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
+                                <Trash2 size={18} />
+                            </div>
+                            <h3 className="text-sm font-black text-red-900 dark:text-red-400 uppercase tracking-tighter">Data Management</h3>
+                        </div>
+                        <p className="text-[10px] text-red-600 dark:text-red-400 font-medium mb-4 leading-relaxed uppercase tracking-tight">
+                            Permanently delete all Profile Master data, Reinforcements, and Quotation history to start fresh imports.
+                        </p>
+                        <button 
+                            onClick={() => {
+                                if (confirm('Are you absolutely sure? This will wipe ALL profile catalogue, reinforcement data, and quotations. This action cannot be undone.')) {
+                                    useStore.getState().resetCatalogueAndQuotations();
+                                    addToast('All Profile and Quotation data has been wiped.', 'success');
+                                }
+                            }}
+                            className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-500/20"
+                        >
+                            Wipe Master Catalogue & Quotations
+                        </button>
                     </Card>
 
                     <Card className="p-6 overflow-hidden">

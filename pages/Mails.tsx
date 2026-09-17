@@ -5,7 +5,7 @@ import { Card } from '../components/Card';
 import { SpinnerIcon } from '../components/Icon';
 import ReactMarkdown from 'react-markdown';
 
-const Mails: React.FC = () => {
+const Mails = () => {
     const suppliers = useStore(state => state.suppliers);
     const items = useStore(state => state.items);
     const profiles = useStore(state => state.profiles);

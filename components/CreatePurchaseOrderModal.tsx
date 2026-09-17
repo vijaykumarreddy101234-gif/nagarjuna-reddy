@@ -10,7 +10,7 @@ interface CreatePurchaseOrderModalProps {
     items: Item[];
 }
 
-const CreatePurchaseOrderModal: React.FC<CreatePurchaseOrderModalProps> = ({ isOpen, onClose, onSave, suppliers, items }) => {
+const CreatePurchaseOrderModal = ({ isOpen, onClose, onSave, suppliers, items }) => {
     const getInitialState = () => ({
         supplierId: '',
         poNumber: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,

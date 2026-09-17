@@ -10,7 +10,7 @@ interface EditConsumptionModalProps {
   items: Item[];
 }
 
-const EditConsumptionModal: React.FC<EditConsumptionModalProps> = ({ isOpen, onClose, transaction, onUpdate, items }) => {
+const EditConsumptionModal = ({ isOpen, onClose, transaction, onUpdate, items }) => {
   const [formData, setFormData] = useState<Partial<ConsumptionTransaction>>({});
   
   const modalRef = useRef<HTMLDivElement>(null);

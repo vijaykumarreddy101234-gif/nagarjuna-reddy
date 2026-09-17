@@ -10,7 +10,7 @@ interface ProfileMonthlyReportProps {
     timeFilter: TimeFilter;
 }
 
-const ProfileMonthlyReport: React.FC<ProfileMonthlyReportProps> = ({ profiles, transactions, brandFilter, timeFilter }) => {
+const ProfileMonthlyReport = ({ profiles, transactions, brandFilter, timeFilter }) => {
 
     const reportData = useMemo(() => {
         const now = new Date();

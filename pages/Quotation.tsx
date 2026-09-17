@@ -6,9 +6,10 @@ import { collection, addDoc, getDocs, doc, updateDoc, increment } from "firebase
 import { jsPDF } from "jspdf";
 import { Card } from "../components/Card";
 import { FileTextIcon, PlusIcon, TrashIcon, DownloadIcon, SaveIcon, SpinnerIcon, PrinterIcon, EyeIcon, EyeOffIcon, LayoutIcon, PencilIcon } from "../components/Icon";
+import { QuotationSpreadsheetGrid } from "../components/QuotationSpreadsheetGrid";
 import * as XLSX from 'xlsx';
 
-interface QuotationItem {
+export interface QuotationItem {
   id: string;
   slNo: number;
   description: string;
@@ -24,6 +25,17 @@ interface QuotationItem {
   isHidden?: boolean;
   isReinforcement?: boolean;
   action?: 'DISPATCH' | 'PRODUCTION';
+  isMerged?: boolean;
+  mergedText?: string;
+  mergedAlign?: 'center' | 'left' | 'right';
+  mergedBg?: string;
+  customFields?: Record<string, string | number>;
+}
+
+export interface CustomColumn {
+  id: string;
+  name: string;
+  insertAfter: string;
 }
 
 const DEFAULT_ITEMS: QuotationItem[] = [];
@@ -65,9 +77,9 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
   const addProfile = useStore(state => state.addProfile);
   const addProfileTransaction = useStore(state => state.addProfileTransaction);
   
-  const [localAlert, setLocalAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [localAlert, setLocalAlert] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
-  const triggerAlert = (message: string, type: 'success' | 'error' = 'success') => {
+  const triggerAlert = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setLocalAlert({ message, type });
     setTimeout(() => {
       setLocalAlert(null);
@@ -82,7 +94,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return ["RAVIRAJA"];
+    return [];
   });
 
   const [selectedBrand, setSelectedBrand] = useState<string>(defaultBrand || "All");
@@ -94,7 +106,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     }
   }, [defaultBrand]);
   const [isDesignerOpen, setIsDesignerOpen] = useState(false);
-  const [designerBrand, setDesignerBrand] = useState<string>("RAVIRAJA");
+  const [designerBrand, setDesignerBrand] = useState<string>("");
   const [newDesignerBrandInput, setNewDesignerBrandInput] = useState("");
 
   // Brand Management Modal & Inline Editing States
@@ -165,7 +177,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     }
 
     const newSettings: CompanySettings = { ...companySettings, brandLogos: currentBrandLogos };
-    if (brandName === "Default" || brandName === "RAVIRAJA") {
+    if (brandName === "Default" || brandName === "General") {
       if (updates.logoUrl !== undefined) newSettings.logoUrl = updates.logoUrl;
       if (updates.logoRightUrl !== undefined) newSettings.logoRightUrl = updates.logoRightUrl;
     }
@@ -177,7 +189,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
   };
 
   const openDesigner = (brandToOpen?: string) => {
-    const targetBrand = brandToOpen || (selectedBrand !== "All" ? selectedBrand : "RAVIRAJA");
+    const targetBrand = brandToOpen || (selectedBrand !== "All" ? selectedBrand : "General");
     setDesignerBrand(targetBrand);
     setIsDesignerOpen(true);
   };
@@ -199,7 +211,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       customerName: "",
       customerAddress: "",
       gstNo: "",
-      companyName: companySettings.name || "RAVIRAJA INDUSTRIES PRIVATE LIMITED",
+      companyName: companySettings.name || companySettings.name,
       accountNo: companySettings.accountNo || "1389150100000003",
       bankName: companySettings.bankName || "UNION BANK",
       ifscCode: companySettings.ifsc || "UBIN0813893",
@@ -220,7 +232,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        const brandToUpdate = targetBrand || (selectedBrand !== "All" ? selectedBrand : (designerBrand || "RAVIRAJA"));
+        const brandToUpdate = targetBrand || (selectedBrand !== "All" ? selectedBrand : (designerBrand || "General"));
         
         saveBrandLogoData(brandToUpdate, {
           [side === "left" ? "logoUrl" : "logoRightUrl"]: result
@@ -249,7 +261,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
   useEffect(() => {
     setQuotationMeta(prev => ({
       ...prev,
-      companyName: prev.companyName || companySettings.name || "RAVIRAJA INDUSTRIES PRIVATE LIMITED",
+      companyName: prev.companyName || companySettings.name || companySettings.name,
       registeredAddress: prev.registeredAddress || (companySettings.addressLine1 + " " + companySettings.addressLine2 + " " + companySettings.cityStateZip),
     }));
   }, [companySettings]);
@@ -270,16 +282,20 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
         return windowProfiles.map((p, idx) => ({
           id: p.id,
           slNo: idx + 1,
-          description: p.name,
+          description: p.isMerged ? (p.mergedText || p.name) : p.name,
           hsn: p.hsnCode || "39162099",
-          profileCode: p.sku,
+          profileCode: p.sku || "",
           packets: 0,
           lengthsInPkt: p.piecesPerPacket || 1,
           eachLength: p.length || 5.9,
           lengthWeight: p.weight || 0,
           meterWeight: (p.weight && p.length) ? p.weight / p.length : 0,
           ratePerKg: p.price || 150,
-          brand: p.brand || "RAVIRAJA",
+          brand: p.brand || "General",
+          isMerged: p.isMerged,
+          mergedText: p.mergedText || p.name,
+          mergedAlign: p.mergedAlign as ('center' | 'left' | 'right' | undefined),
+          mergedBg: p.mergedBg,
           isHidden: false,
           action: 'DISPATCH' as const
         }));
@@ -295,16 +311,20 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       const formattedNew = newItems.map((p, idx) => ({
         id: p.id,
         slNo: prevItems.length + idx + 1,
-        description: p.name,
+        description: p.isMerged ? (p.mergedText || p.name) : p.name,
         hsn: p.hsnCode || "39162099",
-        profileCode: p.sku,
+        profileCode: p.sku || "",
         packets: 0,
         lengthsInPkt: p.piecesPerPacket || 1,
         eachLength: p.length || 5.9,
         lengthWeight: p.weight || 0,
         meterWeight: (p.weight && p.length) ? p.weight / p.length : 0,
         ratePerKg: p.price || 150,
-        brand: p.brand || "RAVIRAJA",
+        brand: p.brand || "General",
+        isMerged: p.isMerged,
+        mergedText: p.mergedText || p.name,
+        mergedAlign: p.mergedAlign as ('center' | 'left' | 'right' | undefined),
+        mergedBg: p.mergedBg,
         isHidden: false,
         action: 'DISPATCH' as const
       }));
@@ -317,16 +337,20 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
         return reinfProfiles.map((p, idx) => ({
           id: p.id,
           slNo: idx + 1,
-          description: p.name,
+          description: p.isMerged ? (p.mergedText || p.name) : p.name,
           hsn: p.hsnCode || "REINFORCEMENT",
-          profileCode: p.sku,
+          profileCode: p.sku || "",
           packets: 0,
           lengthsInPkt: p.piecesPerPacket || 1,
           eachLength: p.length || 0,
           lengthWeight: p.weight || 0,
           meterWeight: (p.weight && p.length) ? p.weight / p.length : 0,
           ratePerKg: p.price || 95,
-          brand: p.brand || "RAVIRAJA",
+          brand: p.brand || "General",
+          isMerged: p.isMerged,
+          mergedText: p.mergedText || p.name,
+          mergedAlign: p.mergedAlign as ('center' | 'left' | 'right' | undefined),
+          mergedBg: p.mergedBg,
           isReinforcement: true,
           isHidden: false,
           action: 'DISPATCH' as const
@@ -342,16 +366,20 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       const formattedNew = newReinfs.map((p, idx) => ({
         id: p.id,
         slNo: prevReinf.length + idx + 1,
-        description: p.name,
+        description: p.isMerged ? (p.mergedText || p.name) : p.name,
         hsn: p.hsnCode || "REINFORCEMENT",
-        profileCode: p.sku,
+        profileCode: p.sku || "",
         packets: 0,
         lengthsInPkt: p.piecesPerPacket || 1,
         eachLength: p.length || 0,
         lengthWeight: p.weight || 0,
         meterWeight: (p.weight && p.length) ? p.weight / p.length : 0,
         ratePerKg: p.price || 95,
-        brand: p.brand || "RAVIRAJA",
+        brand: p.brand || "General",
+        isMerged: p.isMerged,
+        mergedText: p.mergedText || p.name,
+        mergedAlign: p.mergedAlign as ('center' | 'left' | 'right' | undefined),
+        mergedBg: p.mergedBg,
         isReinforcement: true,
         isHidden: false,
         action: 'DISPATCH' as const
@@ -371,6 +399,13 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     setHiddenCols(newHidden);
   };
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [selectedRowType, setSelectedRowType] = useState<"items" | "reinforcements" | null>(null);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  const [showAddColumnModal, setShowAddColumnModal] = useState(false);
+  const [newColName, setNewColName] = useState("");
+  const [newColPos, setNewColPos] = useState("description");
+  const [showGroupedHeaders, setShowGroupedHeaders] = useState(false);
   const [gstMode, setGstMode] = useState<"CGST_SGST" | "IGST">("CGST_SGST");
   const [activeTab, setActiveTab] = useState<"builder" | "history">("builder");
   const [builderTab, setBuilderTab] = useState<"profiles" | "reinforcements">("reinforcements");
@@ -485,7 +520,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       setSelectedBrand("All");
     }
     if (designerBrand.toLowerCase() === brandToDelete.toLowerCase()) {
-      setDesignerBrand("RAVIRAJA");
+      setDesignerBrand("General");
     }
 
     triggerAlert(`Brand "${brandToDelete}" deleted successfully!`, "success");
@@ -495,7 +530,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     if (!window.confirm("Reset brand list to our core brands only (RAVIRAJA)? This will remove other third-party brands.")) {
       return;
     }
-    const coreBrands = ["RAVIRAJA"];
+    const coreBrands = ["General"];
     setAvailableBrands(coreBrands);
     const updatedLogos = (companySettings.brandLogos || []).filter(
       bl => coreBrands.some(cb => cb.toLowerCase() === bl.brand?.toLowerCase())
@@ -504,7 +539,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     if (!coreBrands.includes(selectedBrand)) {
       setSelectedBrand("All");
     }
-    setDesignerBrand("RAVIRAJA");
+    setDesignerBrand("General");
     triggerAlert("Reset to core brands (RAVIRAJA)!", "success");
   };
 
@@ -544,7 +579,10 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
   }, [selectedBrand, companySettings.brandLogos, companySettings.logoUrl, companySettings.logoRightUrl]);
 
   const calculateRowTotal = (item: QuotationItem) => {
-    const totalPieces = item.packets * (item.isReinforcement ? 1 : item.lengthsInPkt);
+    if (item.isMerged) {
+      return { totalLength: 0, totalWeight: 0, ratePerMeter: 0, amount: 0 };
+    }
+    const totalPieces = item.packets * (item.lengthsInPkt || 1);
     const totalWeight = totalPieces * (item.lengthWeight || 0);
     const ratePerMeter = (item.meterWeight || 0) * item.ratePerKg;
     const amount = totalWeight * item.ratePerKg;
@@ -684,7 +722,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       
       // Decrease font size slightly if logos are large
       doc.setFontSize(pdfSettings.headerFontSize > 12 && (leftImg || rightImg) ? 12 : pdfSettings.headerFontSize);
-      doc.text(quotationMeta.companyName || "RAVIRAJA INDUSTRIES PRIVATE LIMITED", headerX, 12);
+      doc.text(quotationMeta.companyName || companySettings.name, headerX, 12);
       
       doc.setFontSize(6.5);
       doc.setTextColor(60);
@@ -776,16 +814,20 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     doc.setFillColor(40, 40, 40);
     doc.rect(10, curY, pageWidth - 20, 9, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont("helvetica", "bold");
-    doc.text("SN", 13, curY + 6);
-    doc.text("DESCRIPTION OF GOODS", 22, curY + 6);
-    doc.text("HSN", 75, curY + 6);
-    doc.text("PROFILE", 95, curY + 6);
-    doc.text("QTY", 125, curY + 6, { align: "center" });
-    doc.text("WT (KG)", 145, curY + 6, { align: "center" });
-    doc.text("RATE", 168, curY + 6, { align: "center" });
-    doc.text("AMOUNT (Rs)", pageWidth - 12, curY + 6, { align: "right" });
+    doc.text("Sl.No", 10, curY + 6);
+    doc.text("Description", 17, curY + 6);
+    doc.text("HSN", 52, curY + 6);
+    doc.text("Profile", 74, curY + 6);
+    doc.text("Packets", 94, curY + 6, { align: "right" });
+    doc.text("L/Pkt", 106, curY + 6, { align: "right" });
+    doc.text("Mtr/Wt", 122, curY + 6, { align: "right" });
+    doc.text("length/Wt", 138, curY + 6, { align: "right" });
+    doc.text("Total L", 152, curY + 6, { align: "right" });
+    doc.text("Total Wt", 168, curY + 6, { align: "right" });
+    doc.text("Rate/Kg", 182, curY + 6, { align: "right" });
+    doc.text("Amount", 200, curY + 6, { align: "right" });
 
 
     curY += 8;
@@ -793,30 +835,50 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     let slCounter = 1;
     const filterAndDraw = (list: QuotationItem[]) => {
       list.forEach(item => {
-        const { totalWeight, amount } = calculateRowTotal(item);
-        if (amount > 0 && !item.isHidden) {
-          doc.setFont("helvetica", "normal");
-          doc.text(slCounter.toString(), 12, curY + 5);
+        if (item.isHidden) return;
+        if (item.isMerged) {
+          doc.setFillColor(235, 240, 245);
+          doc.rect(10, curY + 1, 192, 6, "F");
           doc.setFont("helvetica", "bold");
-          const descLines = doc.splitTextToSize(item.description, 50);
-          doc.text(descLines, 22, curY + 5);
-          
-          doc.setFontSize(7);
+          doc.setFontSize(8);
+          doc.setTextColor(30, 41, 59);
+          const align = item.mergedAlign || "center";
+          const xPos = align === "left" ? 14 : align === "right" ? 198 : 106;
+          doc.text(item.mergedText || item.description || "MERGED SECTION", xPos, curY + 5.5, { align });
+          doc.setTextColor(0);
+          curY += 7.5;
+          if (curY > 260) { doc.addPage(); curY = 20; }
+          return;
+        }
+        const { totalLength, totalWeight, amount } = calculateRowTotal(item);
+        if (amount > 0 && !item.isHidden) {
+          doc.setFontSize(7.5);
           doc.setFont("helvetica", "normal");
-          doc.setTextColor(100);
-          doc.text(item.hsn, 75, curY + 5);
-          doc.text(item.profileCode, 95, curY + 5);
+          doc.text(slCounter.toString(), 10, curY + 5);
+          doc.setFont("helvetica", "bold");
+          
+          const descLines = doc.splitTextToSize(item.description, 33);
+          doc.text(descLines, 17, curY + 5);
+          
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(80);
+          doc.text(item.hsn || "-", 52, curY + 5);
+          doc.text(item.profileCode || "-", 74, curY + 5);
           doc.setTextColor(0);
           
-          doc.setFontSize(8);
-          doc.text(item.packets.toString(), 125, curY + 5, { align: "center" });
-          doc.text(totalWeight.toFixed(3), 145, curY + 5, { align: "center" });
-          doc.text(item.ratePerKg.toFixed(2), 168, curY + 5, { align: "center" });
-          doc.setFont("helvetica", "bold");
-          doc.text(amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }), pageWidth - 12, curY + 5, { align: "right" });
+          doc.text(item.packets.toString(), 94, curY + 5, { align: "right" });
+          doc.text((item.lengthsInPkt || 1).toString(), 106, curY + 5, { align: "right" });
+          doc.text((item.meterWeight || 0).toFixed(3), 122, curY + 5, { align: "right" });
+          doc.text((item.lengthWeight || 0).toFixed(3), 138, curY + 5, { align: "right" });
+          doc.text(totalLength.toFixed(1), 152, curY + 5, { align: "right" });
+          doc.text(totalWeight.toFixed(3), 168, curY + 5, { align: "right" });
+          doc.text((item.ratePerKg || 0).toFixed(2), 182, curY + 5, { align: "right" });
           
-          const rowHeight = descLines.length * 4 + 3;
-          curY += Math.max(7, rowHeight);
+          doc.setFont("helvetica", "bold");
+          doc.text(amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }), 200, curY + 5, { align: "right" });
+          
+          const rowHeight = descLines.length * 3.5 + 2.5;
+          curY += Math.max(6, rowHeight);
           slCounter++;
           doc.setDrawColor(240);
           doc.line(10, curY, pageWidth - 10, curY);
@@ -834,6 +896,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     if (hasRefs) {
       curY += 2;
       doc.setFont("helvetica", "bolditalic");
+      doc.setFontSize(8);
       doc.text("REINFORCEMENTS:", 15, curY + 4);
       curY += 7;
       filterAndDraw(activeRefs);
@@ -902,7 +965,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       doc.setTextColor(0);
       doc.setFont("helvetica", "normal");
       curY += 6;
-      doc.text(`ACCOUNT NAME: ${quotationMeta.companyName || "RAVIRAJA INDUSTRIES PRIVATE LIMITED"}`, 10, curY);
+      doc.text(`ACCOUNT NAME: ${quotationMeta.companyName || companySettings.name}`, 10, curY);
       curY += 4.5;
       doc.text(`CURRENT A/C NO: ${quotationMeta.accountNo || "1389150100000003"}`, 10, curY);
       curY += 4.5;
@@ -925,7 +988,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     doc.setTextColor(0);
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
-    doc.text(`For ${quotationMeta.companyName || "RAVIRAJA INDUSTRIES PRIVATE LIMITED"}`, pageWidth - 15, curY - 10, { align: "right" });
+    doc.text(`For ${quotationMeta.companyName || companySettings.name}`, pageWidth - 15, curY - 10, { align: "right" });
     doc.line(pageWidth - 80, curY + 5, pageWidth - 15, curY + 5);
     doc.text("AUTHORISED SIGNATORY", pageWidth - 15, curY + 10, { align: "right" });
 
@@ -1002,14 +1065,46 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     }
   };
 
-  const addProfileRow = () => {
-    const newId = `profile-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const newItem: QuotationItem = {
+  const selectedRowItem = useMemo(() => {
+    if (!selectedRowId || !selectedRowType) return null;
+    const list = selectedRowType === "items" ? items : reinforcements;
+    return list.find(it => it.id === selectedRowId) || null;
+  }, [selectedRowId, selectedRowType, items, reinforcements]);
+
+  const selectedRowItemIndex = useMemo(() => {
+    if (!selectedRowId || !selectedRowType) return -1;
+    const list = selectedRowType === "items" ? items : reinforcements;
+    return list.findIndex(it => it.id === selectedRowId);
+  }, [selectedRowId, selectedRowType, items, reinforcements]);
+
+  const insertRow = (type: "items" | "reinforcements", targetIndex: number, position: "above" | "below", isMerged: boolean = false) => {
+    const newId = `${type === "items" ? "profile" : "reinf"}-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newItem: QuotationItem = isMerged ? {
+      id: newId,
+      slNo: 0,
+      description: "MERGED SECTION / NOTE",
+      hsn: "",
+      brand: selectedBrand === "All" ? "General" : selectedBrand,
+      profileCode: "",
+      packets: 0,
+      lengthsInPkt: 0,
+      eachLength: 0,
+      lengthWeight: 0,
+      meterWeight: 0,
+      ratePerKg: 0,
+      isHidden: false,
+      isReinforcement: type === "reinforcements",
+      isMerged: true,
+      mergedText: "NEW SECTION TITLE / NOTE (MERGED & CENTERED)",
+      mergedAlign: "center",
+      mergedBg: "bg-slate-100",
+      action: "DISPATCH"
+    } : (type === "items" ? {
       id: newId,
       slNo: items.length + 1,
       description: "NEW PROFILE ITEM",
       hsn: "39162099",
-      brand: selectedBrand === "All" ? "RAVIRAJA" : selectedBrand,
+      brand: selectedBrand === "All" ? "General" : selectedBrand,
       profileCode: "PRF-NEW",
       packets: 1,
       lengthsInPkt: 6,
@@ -1020,20 +1115,12 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       isHidden: false,
       isReinforcement: false,
       action: 'DISPATCH'
-    };
-    setItems(prev => [...prev, newItem]);
-    setBuilderTab("profiles");
-    triggerAlert("New Profile item added to quotation table!", "success");
-  };
-
-  const addReinforcementRow = () => {
-    const newId = `reinf-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const newItem: QuotationItem = {
+    } : {
       id: newId,
       slNo: reinforcements.length + 1,
       description: "Galvanised Plain/Steel (NEW REINFORCEMENT)",
       hsn: "REINFORCEMENT",
-      brand: "RAVIRAJA",
+      brand: "General",
       profileCode: "REINF-NEW",
       packets: 1,
       lengthsInPkt: 1,
@@ -1044,10 +1131,133 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       isReinforcement: true,
       isHidden: false,
       action: 'DISPATCH'
+    });
+
+    if (type === "items") {
+      setItems(prev => {
+        const copy = [...prev];
+        const insertAt = position === "above" ? Math.max(0, targetIndex) : targetIndex + 1;
+        copy.splice(insertAt, 0, newItem);
+        return copy;
+      });
+    } else {
+      setReinforcements(prev => {
+        const copy = [...prev];
+        const insertAt = position === "above" ? Math.max(0, targetIndex) : targetIndex + 1;
+        copy.splice(insertAt, 0, newItem);
+        return copy;
+      });
+    }
+    setSelectedRowId(newId);
+    setSelectedRowType(type);
+    triggerAlert(`Row inserted ${position}! Click 'Merge & Center' to merge cells.`, "success");
+  };
+
+  const toggleMergeCenter = (type: "items" | "reinforcements", id: string) => {
+    const updateList = (list: QuotationItem[]) => list.map(it => {
+      if (it.id === id) {
+        const willBeMerged = !it.isMerged;
+        return {
+          ...it,
+          isMerged: willBeMerged,
+          mergedText: it.mergedText || it.description || "MERGED SECTION HEADING / NOTE",
+          mergedAlign: it.mergedAlign || "center",
+          mergedBg: it.mergedBg || "bg-slate-100"
+        };
+      }
+      return it;
+    });
+
+    if (type === "items") {
+      setItems(prev => updateList(prev));
+    } else {
+      setReinforcements(prev => updateList(prev));
+    }
+    triggerAlert("Merge & Center toggled for row!", "success");
+  };
+
+  const handleToolbarMergeCenter = () => {
+    if (!selectedRowId || !selectedRowType) {
+      insertRow(builderTab === 'reinforcements' ? 'reinforcements' : 'items', 0, 'above', true);
+      return;
+    }
+    toggleMergeCenter(selectedRowType, selectedRowId);
+  };
+
+  const handleToolbarInsertRow = (pos: "above" | "below", isMerged: boolean = false) => {
+    const type = selectedRowType || (builderTab === 'reinforcements' ? 'reinforcements' : 'items');
+    const list = type === 'items' ? items : reinforcements;
+    let idx = list.findIndex(it => it.id === selectedRowId);
+    if (idx === -1) {
+      idx = pos === 'above' ? 0 : list.length - 1;
+    }
+    insertRow(type, Math.max(0, idx), pos, isMerged);
+  };
+
+  const handleToolbarDeleteRow = () => {
+    if (!selectedRowId || !selectedRowType) {
+      triggerAlert("Please select a row to delete first!", "info");
+      return;
+    }
+    deleteRow(selectedRowType, selectedRowId);
+    setSelectedRowId(null);
+    setSelectedRowType(null);
+    triggerAlert("Row deleted!", "info");
+  };
+
+  const insertCustomColumn = (name: string, insertAfter: string) => {
+    if (!name.trim()) {
+      triggerAlert("Please enter a column title!", "error");
+      return;
+    }
+    const newCol: CustomColumn = {
+      id: `col_${Date.now()}`,
+      name: name.trim(),
+      insertAfter
     };
-    setReinforcements(prev => [...prev, newItem]);
+    setCustomColumns(prev => [...prev, newCol]);
+    setNewColName("");
+    setShowAddColumnModal(false);
+    triggerAlert(`Column "${name}" added successfully!`, "success");
+  };
+
+  const deleteCustomColumn = (colId: string) => {
+    setCustomColumns(prev => prev.filter(c => c.id !== colId));
+    triggerAlert("Custom column deleted!", "info");
+  };
+
+  const renameCustomColumn = (colId: string, newName: string) => {
+    setCustomColumns(prev => prev.map(c => c.id === colId ? { ...c, name: newName } : c));
+  };
+
+  const updateCustomField = (type: "items" | "reinforcements", idx: number, colId: string, value: string) => {
+    if (type === "items") {
+      setItems(prev => {
+        const copy = [...prev];
+        const item = { ...copy[idx] };
+        item.customFields = { ...(item.customFields || {}), [colId]: value };
+        copy[idx] = item;
+        return copy;
+      });
+    } else {
+      setReinforcements(prev => {
+        const copy = [...prev];
+        const ref = { ...copy[idx] };
+        ref.customFields = { ...(ref.customFields || {}), [colId]: value };
+        copy[idx] = ref;
+        return copy;
+      });
+    }
+  };
+
+  const addProfileRow = () => {
+    insertRow("items", items.length - 1, "below", false);
+    setBuilderTab("profiles");
+  };
+
+  const addReinforcementRow = () => {
+    insertRow("reinforcements", reinforcements.length - 1, "below", false);
     setBuilderTab("reinforcements");
-    triggerAlert("New Reinforcement item added to quotation table!", "success");
   };
 
   const addItemRow = () => {
@@ -1064,35 +1274,65 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     } else {
       setReinforcements(prev => prev.filter(it => it.id !== id));
     }
+    if (selectedRowId === id) {
+      setSelectedRowId(null);
+      setSelectedRowType(null);
+    }
   };
 
   const handleExportExcel = () => {
-    const data = [
+    const data: any[][] = [
       ["QUOTATION"],
       ["Customer:", quotationMeta.customerAddress],
       ["GST NO:", quotationMeta.gstNo],
       ["Date:", quotationMeta.date],
-      [],
-      ["Sl.No", "Description", "HSN", "Brand", "Profile", "Packets", "L/Pkt", "Total L", "Each L", "Total Wt", "Rate/Kg", "Amount"]
+      []
     ];
+
+    const baseCols = ["Sl.No", "Description", "HSN", "Brand", "Profile", "Packets", "L/Pkt", "Total L", "Each L", "Total Wt", "Rate/Kg", "Amount"];
+    const headerRow = [...baseCols];
+    customColumns.forEach(c => headerRow.push(c.name));
+    data.push(headerRow);
+    const colCount = headerRow.length;
+    const merges: any[] = [];
 
     let slNo = 1;
     items.filter(it => !it.isHidden && (selectedBrand === "All" || it.brand === selectedBrand)).forEach(it => {
+      if (it.isMerged) {
+        const rIdx = data.length;
+        const rowArr = new Array(colCount).fill("");
+        rowArr[0] = it.mergedText || it.description || "MERGED SECTION";
+        data.push(rowArr);
+        merges.push({ s: { r: rIdx, c: 0 }, e: { r: rIdx, c: colCount - 1 } });
+        return;
+      }
       const { totalLength, totalWeight, amount } = calculateRowTotal(it);
-      if (amount > 0) {
-        data.push([
+      if (amount > 0 || it.packets > 0) {
+        const rowData = [
           String(slNo++), it.description, it.hsn, it.brand, it.profileCode, String(it.packets), String(it.lengthsInPkt), totalLength.toFixed(1), String(it.eachLength), totalWeight.toFixed(3), String(it.ratePerKg), amount.toFixed(2)
-        ]);
+        ];
+        customColumns.forEach(c => rowData.push(String(it.customFields?.[c.id] || "")));
+        data.push(rowData);
       }
     });
 
     data.push(["Reinforcements"]);
     reinforcements.filter(it => !it.isHidden).forEach(it => {
+      if (it.isMerged) {
+        const rIdx = data.length;
+        const rowArr = new Array(colCount).fill("");
+        rowArr[0] = it.mergedText || it.description || "MERGED SECTION";
+        data.push(rowArr);
+        merges.push({ s: { r: rIdx, c: 0 }, e: { r: rIdx, c: colCount - 1 } });
+        return;
+      }
       const { totalLength, totalWeight, amount } = calculateRowTotal(it);
-      if (amount > 0) {
-        data.push([
-          String(slNo++), it.description, it.hsn, it.brand, it.profileCode, String(it.packets), "-", totalLength.toFixed(1), "-", totalWeight.toFixed(3), String(it.ratePerKg), amount.toFixed(2)
-        ]);
+      if (amount > 0 || it.packets > 0) {
+        const rowData = [
+          String(slNo++), it.description, it.hsn, it.brand, it.profileCode, String(it.packets), String(it.lengthsInPkt || 1), totalLength.toFixed(1), String(it.eachLength || 0), totalWeight.toFixed(3), String(it.ratePerKg), amount.toFixed(2)
+        ];
+        customColumns.forEach(c => rowData.push(String(it.customFields?.[c.id] || "")));
+        data.push(rowData);
       }
     });
 
@@ -1100,6 +1340,9 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     data.push(["Grand Total", String(totals.grandTotal)]);
 
     const ws = XLSX.utils.aoa_to_sheet(data);
+    if (merges.length > 0) {
+      ws['!merges'] = merges;
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Quotation");
     XLSX.writeFile(wb, `Quotation_${quotationMeta.quotationNo}.xlsx`);
@@ -1127,7 +1370,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
       
       for (const item of allQuoteItems) {
         // Calculate total pieces for dispatch
-        const totalPcs = item.packets * (item.isReinforcement ? 1 : item.lengthsInPkt);
+        const totalPcs = item.packets * (item.lengthsInPkt || 1);
         const actionType = item.action || 'DISPATCH';
         
         // --- STORE SYNC START ---
@@ -1197,6 +1440,35 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
     }
   };
 
+  const basicCols = ['slNo', 'description', 'hsn', 'brand', 'profileCode'];
+  const lengthCols = ['packets', 'lengthsInPkt', 'totalL', 'eachL'];
+  const weightCols = ['lengthWt', 'meterWt', 'totalWt'];
+  const rateCols = ['rateKg', 'rateMtr', 'amount'];
+
+  const getGroupColSpan = (group: 'basic' | 'length' | 'weight' | 'rate') => {
+    let count = 0;
+    if (group === 'basic') {
+      count += basicCols.filter(c => !hiddenCols.has(c)).length;
+      count += customColumns.filter(c => ['description', 'hsn', 'brand', 'profileCode'].includes(c.insertAfter) && !hiddenCols.has(c.id)).length;
+    } else if (group === 'length') {
+      count += lengthCols.filter(c => !hiddenCols.has(c)).length;
+      count += customColumns.filter(c => ['packets', 'lengthsInPkt', 'totalL', 'eachL'].includes(c.insertAfter) && !hiddenCols.has(c.id)).length;
+    } else if (group === 'weight') {
+      count += weightCols.filter(c => !hiddenCols.has(c)).length;
+      count += customColumns.filter(c => ['lengthWt', 'meterWt', 'totalWt'].includes(c.insertAfter) && !hiddenCols.has(c.id)).length;
+    } else if (group === 'rate') {
+      count += rateCols.filter(c => !hiddenCols.has(c)).length;
+      count += customColumns.filter(c => ['rateKg', 'rateMtr', 'end'].includes(c.insertAfter) && !hiddenCols.has(c.id)).length;
+    }
+    return Math.max(1, count);
+  };
+
+  const totalVisibleCols = useMemo(() => {
+    const stdCount = 15 - hiddenCols.size;
+    const customCount = customColumns.filter(c => !hiddenCols.has(c.id)).length;
+    return stdCount + customCount;
+  }, [hiddenCols, customColumns]);
+
   let slNoCounter = 0;
 
   return (
@@ -1205,9 +1477,11 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
         <div className={`fixed top-6 right-6 z-50 p-4 rounded-2xl border shadow-2xl flex items-center gap-3 animate-bounce ${
           localAlert.type === 'success' 
             ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800' 
+            : localAlert.type === 'info'
+            ? 'bg-sky-50 dark:bg-sky-950 text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-800'
             : 'bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-200 border-red-200 dark:border-red-800'
         }`}>
-          <span className="text-lg">{localAlert.type === 'success' ? '✅' : '🚨'}</span>
+          <span className="text-lg">{localAlert.type === 'success' ? '✅' : localAlert.type === 'info' ? 'ℹ️' : '🚨'}</span>
           <p className="text-xs font-bold uppercase tracking-wider">{localAlert.message}</p>
         </div>
       )}
@@ -1458,7 +1732,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
           {/* Center Title */}
           <div className="text-center flex-1">
             <h1 className="text-3xl font-black tracking-widest uppercase mb-1 text-slate-900">QUOTATION</h1>
-            <p className="text-[10px] font-black uppercase text-slate-600 tracking-[0.15em]">{quotationMeta.companyName || "Raviraja Industries Private Limited"}</p>
+            <p className="text-[10px] font-black uppercase text-slate-600 tracking-[0.15em]">{quotationMeta.companyName || companySettings.name}</p>
             <div className="flex items-center justify-center gap-2 mt-1">
               <span className="inline-block text-[9px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                 Brand: {selectedBrand !== "All" ? selectedBrand : (quotationMeta.brandTheme || "Default")}
@@ -1695,6 +1969,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                     { id: 'hsn', label: 'HSN Code' },
                     { id: 'brand', label: 'Brand' },
                     { id: 'profileCode', label: 'Profile Code' },
+                    ...customColumns.map(c => ({ id: c.id, label: `${c.name} (Custom)` })),
                     { id: 'packets', label: 'Packets' },
                     { id: 'lengthsInPkt', label: 'Lengths/Pkt' },
                     { id: 'totalL', label: 'Total Length' },
@@ -1740,354 +2015,260 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
           </div>
         </div>
 
-        {/* Main Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-[9px] border-collapse border border-black text-center">
-            <thead className="bg-gray-100 uppercase font-black tracking-tighter">
-              <tr className="border-b-2 border-black">
-                {!hiddenCols.has('slNo') && <th className="border-r border-black p-1 w-8">Sl.No</th>}
-                {!hiddenCols.has('description') && <th className="border-r border-black p-1">Description</th>}
-                {!hiddenCols.has('hsn') && <th className="border-r border-black p-1">HSN</th>}
-                {!hiddenCols.has('brand') && <th className="border-r border-black p-1">Brand</th>}
-                {!hiddenCols.has('profileCode') && <th className="border-r border-black p-1">Profile Code</th>}
-                {!hiddenCols.has('packets') && <th className="border-r border-black p-1 w-12">Packets</th>}
-                {!hiddenCols.has('lengthsInPkt') && <th className="border-r border-black p-1 w-10">L/Pkt</th>}
-                {!hiddenCols.has('totalL') && <th className="border-r border-black p-1 w-12 text-blue-800">Total L.</th>}
-                {!hiddenCols.has('eachL') && <th className="border-r border-black p-1 w-10">Each L.</th>}
-                {!hiddenCols.has('lengthWt') && <th className="border-r border-black p-1">Length Wt</th>}
-                {!hiddenCols.has('meterWt') && <th className="border-r border-black p-1">Meter Wt</th>}
-                {!hiddenCols.has('totalWt') && <th className="border-r border-black p-1 text-blue-800">Total Wt(kg)</th>}
-                {!hiddenCols.has('rateKg') && <th className="border-r border-black p-1">Rate/kg</th>}
-                {!hiddenCols.has('rateMtr') && <th className="border-r border-black p-1">Rate/MTR</th>}
-                <th className="border-r border-black p-1 text-right pr-2 bg-yellow-50">Amount (Rs)</th>
-                <th className="no-print border-black p-1 w-12">ACTION</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black">
-                <tr className={`${builderTab === 'reinforcements' ? 'hidden' : 'bg-slate-100/80'} font-black border-b border-black print:table-row`}>
-                  <td colSpan={15 - hiddenCols.size} className="p-1.5 uppercase tracking-wider text-left pl-4 text-[10px] text-slate-800 flex items-center justify-between">
-                    <span className="font-extrabold flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-blue-600 inline-block"></span>
-                      Profile Section ({items.filter(i => !i.isHidden).length} items)
-                    </span>
-                    <button 
-                      onClick={addProfileRow} 
-                      className="no-print text-[9px] bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 font-bold px-2.5 py-0.5 rounded shadow-xs active:scale-95 flex items-center gap-1"
-                    >
-                      <PlusIcon className="w-2.5 h-2.5" /> + Add Profile Item
-                    </button>
-                  </td>
-                  <td className="no-print p-1 bg-slate-200">
-                    <button 
-                      onClick={addProfileRow}
-                      className="text-[9px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-0.5 rounded shadow-sm flex items-center gap-0.5 mx-auto active:scale-95"
-                      title="Add new Profile row"
-                    >
-                      <PlusIcon className="w-2.5 h-2.5" /> Row
-                    </button>
-                  </td>
-                </tr>
+        {/* Modal to Add Custom Column */}
+        {showAddColumnModal && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl p-5 max-w-md w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                  <span className="p-1 rounded bg-indigo-50 text-indigo-700">➕</span> Add Custom Column
+                </h3>
+                <button 
+                  onClick={() => setShowAddColumnModal(false)}
+                  className="text-slate-400 hover:text-slate-700 text-lg font-bold w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
 
-               {items.map((item, idx) => {
-                 const isVisibleInBrand = selectedBrand === "All" || item.brand === selectedBrand;
-                 if (!isVisibleInBrand) return null;
-                 
-                 const { totalLength, totalWeight, ratePerMeter, amount } = calculateRowTotal(item);
-                 const isVisibleInTab = builderTab === 'profiles';
-                 if (!isVisibleInTab && amount === 0) return null;
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-slate-600 mb-1">Column Header Title</label>
+                  <input
+                    value={newColName}
+                    onChange={e => setNewColName(e.target.value)}
+                    placeholder="e.g. Color Code, Remarks, Batch..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold focus:border-indigo-600 outline-none"
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        insertCustomColumn(newColName, newColPos);
+                      }
+                    }}
+                  />
+                </div>
 
-                  slNoCounter++;
-                 return (
-                    <tr key={item.id} className={`${amount > 0 ? "bg-yellow-50/20" : (isVisibleInTab ? "" : "hidden")} ${amount === 0 && !isVisibleInTab ? "hidden" : ""} ${item.isHidden ? "opacity-35" : ""} hover:bg-slate-50 transition-colors group`}>
-                     {!hiddenCols.has('slNo') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                             value={slNoCounter} 
-                             readOnly
-                             className="w-full bg-slate-100/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-mono text-slate-900 font-bold cursor-default"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('description') && (
-                        <td className="border-r border-slate-300 p-0.5 text-left font-bold min-w-[150px]">
-                          <input 
-                            value={item.description ?? ''} 
-                            onChange={(e) => updateItemValue("items", idx, "description", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 outline-none rounded transition-all font-black text-slate-900 text-left"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('hsn') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            value={item.hsn ?? ''} 
-                            onChange={(e) => updateItemValue("items", idx, "hsn", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-semibold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('brand') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <select 
-                            value={item.brand ?? 'S CRAFT'} 
-                            onChange={(e) => updateItemValue("items", idx, "brand", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-[8px] font-bold text-slate-900 pr-1 cursor-pointer"
-                          >
-                            {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        </td>
-                     )}
-                     {!hiddenCols.has('profileCode') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            value={item.profileCode ?? ''} 
-                            onChange={(e) => updateItemValue("items", idx, "profileCode", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-mono font-bold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('packets') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            value={item.packets || 0}
-                            onChange={(e) => updateItemValue("items", idx, "packets", e.target.value)}
-                            className="w-full bg-slate-100/50 hover:bg-white border border-slate-250 hover:border-slate-400 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-black text-blue-700"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('lengthsInPkt') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            value={item.lengthsInPkt || 0}
-                            onChange={(e) => updateItemValue("items", idx, "lengthsInPkt", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-bold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('totalL') && <td className="border-r border-slate-300 p-2 font-black text-blue-900 text-center text-xs bg-slate-50">{totalLength.toFixed(1)}</td>}
-                     {!hiddenCols.has('eachL') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            value={item.eachLength || 0}
-                            onChange={(e) => updateItemValue("items", idx, "eachLength", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('lengthWt') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            step="0.001"
-                            value={item.lengthWeight || 0}
-                            onChange={(e) => updateItemValue("items", idx, "lengthWeight", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-medium"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('meterWt') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            step="0.001"
-                            value={item.meterWeight || 0}
-                            onChange={(e) => updateItemValue("items", idx, "meterWeight", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-mono text-slate-900 font-semibold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('totalWt') && <td className="border-r border-slate-300 p-2 font-black text-blue-900 text-center text-xs bg-slate-50">{totalWeight.toFixed(3)}</td>}
-                     {!hiddenCols.has('rateKg') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            value={item.ratePerKg || 0}
-                            onChange={(e) => updateItemValue("items", idx, "ratePerKg", e.target.value)}
-                            className="w-full bg-red-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-extrabold text-red-700"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('rateMtr') && <td className="border-r border-slate-300 p-2 font-mono text-[9px] text-center text-slate-700 font-bold bg-slate-50">{ratePerMeter.toFixed(2)}</td>}
-                     <td className="border-r border-slate-300 p-2 font-black text-right pr-2 min-w-[90px] text-slate-900 text-xs bg-yellow-50/10">
-                        {amount > 0 ? amount.toLocaleString('en-IN', {minimumFractionDigits: 2}) : "-"}
-                     </td>
-                     <td className="no-print border-slate-300 flex items-center justify-center p-1.5 gap-1.5 bg-slate-50">
-                        <button 
-                          onClick={() => toggleRowVisibility("items", item.id)}
-                          className={`p-1 transition-all ${item.isHidden ? 'text-red-500 opacity-100' : 'text-slate-400 hover:text-slate-800 opacity-60 group-hover:opacity-100'}`}
-                          title={item.isHidden ? "Show Row" : "Hide Row"}
-                        >
-                          {item.isHidden ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
-                        </button>
-                        <button 
-                          onClick={() => deleteRow("items", item.id)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-all opacity-80 group-hover:opacity-100"
-                          title="Delete Row"
-                        >
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                     </td>
-                    </tr>
-                 );
-               })}
-               
-               <tr className={`${builderTab === 'profiles' ? 'hidden' : 'bg-slate-200'} font-black border-t-2 border-b border-black print:table-row`}>
-                 <td colSpan={15 - hiddenCols.size} className="p-1.5 uppercase tracking-wider text-left pl-4 text-[10px] text-slate-900 flex items-center justify-between">
-                   <span className="font-extrabold flex items-center gap-2">
-                     <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
-                     Reinforcement Section ({reinforcements.filter(i => !i.isHidden).length} items)
-                   </span>
-                   <button 
-                     onClick={addReinforcementRow} 
-                     className="no-print text-[9px] bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-bold px-2.5 py-0.5 rounded shadow-xs active:scale-95 flex items-center gap-1"
-                   >
-                     <PlusIcon className="w-2.5 h-2.5" /> + Add Reinforcement Item
-                   </button>
-                 </td>
-                 <td className="no-print p-1 bg-slate-300">
-                   <button 
-                     onClick={addReinforcementRow}
-                     className="text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2 py-0.5 rounded shadow-sm flex items-center gap-0.5 mx-auto active:scale-95"
-                     title="Add new Reinforcement row"
-                   >
-                     <PlusIcon className="w-2.5 h-2.5" /> Row
-                   </button>
-                 </td>
-               </tr>
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-slate-600 mb-1">Insert Position</label>
+                  <select
+                    value={newColPos}
+                    onChange={e => setNewColPos(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold focus:border-indigo-600 outline-none cursor-pointer"
+                  >
+                    <option value="description">After Description</option>
+                    <option value="hsn">After HSN</option>
+                    <option value="brand">After Brand</option>
+                    <option value="profileCode">After Profile Code</option>
+                    <option value="packets">After Packets</option>
+                    <option value="lengthsInPkt">After L/Pkt</option>
+                    <option value="totalL">After Total Length</option>
+                    <option value="eachL">After Each Length</option>
+                    <option value="lengthWt">After Length Weight</option>
+                    <option value="meterWt">After Meter Weight</option>
+                    <option value="totalWt">After Total Weight</option>
+                    <option value="rateKg">After Rate/Kg</option>
+                    <option value="rateMtr">After Rate/MTR</option>
+                    <option value="end">At Table End (After Amount)</option>
+                  </select>
+                </div>
+              </div>
 
-               {reinforcements.map((item, idx) => {
-                 const isVisibleInBrand = true;
-                 if (!isVisibleInBrand) return null;
-                 const { totalLength, totalWeight, amount } = calculateRowTotal(item);
-                 const isVisibleInTab = builderTab === 'reinforcements';
-                 if (!isVisibleInTab && amount === 0) return null;
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  onClick={() => setShowAddColumnModal(false)}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => insertCustomColumn(newColName, newColPos)}
+                  className="px-4 py-1.5 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm active:scale-95 transition-all"
+                >
+                  Add Column
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
-                  slNoCounter++;
-                 return (
-                   <tr key={item.id} className={`${amount > 0 ? "bg-blue-50/20" : (isVisibleInTab ? "" : "hidden")} ${amount === 0 && !isVisibleInTab ? "hidden" : ""} ${item.isHidden ? "opacity-35" : ""} hover:bg-slate-50 transition-colors group`}>
-                     {!hiddenCols.has('slNo') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                             value={slNoCounter} 
-                             readOnly
-                             className="w-full bg-slate-100/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-mono text-slate-900 font-bold cursor-default"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('description') && (
-                        <td className="border-r border-slate-300 p-0.5 text-left font-bold min-w-[150px]">
-                          <input 
-                            value={item.description ?? ''} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "description", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 outline-none rounded transition-all font-black text-slate-900 text-left"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('hsn') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <input 
-                            value={item.hsn ?? ''} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "hsn", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-semibold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('brand') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <select 
-                            value={item.brand ?? 'REINFORCEMENT'} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "brand", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-[8px] font-bold text-slate-900 pr-1 cursor-pointer"
-                          >
-                            <option value="REINFORCEMENT">REINF</option>
-                            {availableBrands.filter(b => b !== "REINFORCEMENT").map(b => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        </td>
-                     )}
-                     {!hiddenCols.has('profileCode') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <input 
-                            value={item.profileCode ?? ''} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "profileCode", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-mono font-bold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('packets') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <input 
-                            type="number"
-                            value={item.packets || 0} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "packets", e.target.value)}
-                            className="w-full bg-slate-100/50 hover:bg-white border border-slate-250 hover:border-slate-400 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-black text-blue-700"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('lengthsInPkt') && <td className="border-r border-slate-300 p-2 text-center text-slate-400 bg-slate-50">-</td>}
-                     {!hiddenCols.has('totalL') && <td className="border-r border-slate-300 p-2 font-black text-blue-900 text-center text-xs bg-slate-50">{item.packets.toFixed(1)}</td>}
-                     {!hiddenCols.has('eachL') && <td className="border-r border-slate-300 p-2 text-center text-slate-400 bg-slate-50">-</td>}
-                     {!hiddenCols.has('lengthWt') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <input 
-                            type="number"
-                            step="0.001"
-                            value={item.lengthWeight || 0} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "lengthWeight", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all text-slate-900 font-medium"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('meterWt') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                          <input 
-                            type="number"
-                            step="0.001"
-                            value={item.meterWeight || 0} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "meterWeight", e.target.value)}
-                            className="w-full bg-slate-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-mono text-slate-900 font-semibold"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('totalWt') && <td className="border-r border-slate-300 p-2 font-black text-blue-900 text-center text-xs bg-slate-50">{totalWeight.toFixed(3)}</td>}
-                     {!hiddenCols.has('rateKg') && (
-                        <td className="border-r border-slate-300 p-0.5">
-                           <input 
-                            type="number"
-                            value={item.ratePerKg || 0} 
-                            onChange={(e) => updateItemValue("reinforcements", idx, "ratePerKg", e.target.value)}
-                            className="w-full bg-red-50/50 hover:bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-650 focus:bg-yellow-50/40 p-2 text-center outline-none rounded transition-all font-extrabold text-red-700"
-                          />
-                        </td>
-                     )}
-                     {!hiddenCols.has('rateMtr') && <td className="border-r border-slate-300 p-2 text-center text-slate-400 bg-slate-50">-</td>}
-                     <td className="border-r border-slate-300 p-2 font-black text-right pr-2 text-slate-900 text-xs bg-yellow-50/10">
-                        {amount > 0 ? amount.toLocaleString('en-IN', {minimumFractionDigits: 2}) : "-"}
-                     </td>
-                     <td className="no-print border-slate-300 flex items-center justify-center p-1.5 gap-1.5 bg-slate-50">
-                        <button 
-                          onClick={() => toggleRowVisibility("reinforcements", item.id)}
-                          className={`p-1 transition-all ${item.isHidden ? 'text-red-500 opacity-100' : 'text-slate-400 hover:text-slate-800 opacity-60 group-hover:opacity-100'}`}
-                          title={item.isHidden ? "Show Row" : "Hide Row"}
-                        >
-                          {item.isHidden ? <EyeOffIcon className="w-3.5 h-3.5" /> : <EyeIcon className="w-3.5 h-3.5" />}
-                        </button>
-                        <button 
-                          onClick={() => deleteRow("reinforcements", item.id)}
-                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-all opacity-80 group-hover:opacity-100"
-                          title="Delete Row"
-                        >
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                     </td>
-                   </tr>
-                 );
-               })}
-            </tbody>
-          </table>
+        {/* Excel Spreadsheet Ribbon Toolbar */}
+        <div className="no-print bg-gradient-to-r from-emerald-50 via-teal-50 to-sky-50 border-2 border-emerald-500/30 rounded-2xl p-3 shadow-sm mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="bg-emerald-600 text-white p-2 rounded-xl shadow-xs">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="8" y1="13" x2="16" y2="13"></line>
+                  <line x1="8" y1="17" x2="16" y2="17"></line>
+                  <line x1="10" y1="9" x2="10" y2="9.01"></line>
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-emerald-950 flex items-center gap-2">
+                  Excel Spreadsheet Tools
+                  <span className="text-[9px] bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded-full font-extrabold">Active Grid</span>
+                </h4>
+                <p className="text-[10px] text-emerald-800 font-medium">
+                  {selectedRowItem 
+                    ? `Selected Row: "${selectedRowItem.description?.substring(0, 22)}..." (${selectedRowType === 'items' ? 'Profile' : 'Reinforcement'})` 
+                    : "Select any row to merge/center, insert above/below, or click the buttons below"}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Action Ribbon Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Merge & Center Button */}
+              <button
+                onClick={handleToolbarMergeCenter}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-black text-xs transition-all shadow-sm active:scale-95 ${
+                  selectedRowItem?.isMerged
+                    ? "bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300"
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white ring-2 ring-indigo-300"
+                }`}
+                title="Merge row across all columns and center text (Excel style)"
+              >
+                <span className="text-sm">🔀</span>
+                {selectedRowItem?.isMerged ? "Unmerge Row" : "Merge & Center"}
+              </button>
+
+              {/* Insert Row Above */}
+              <button
+                onClick={() => handleToolbarInsertRow("above", false)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100/70 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                title="Insert new row above current selection"
+              >
+                <PlusIcon className="w-3.5 h-3.5 text-emerald-600" />
+                + Row Above
+              </button>
+
+              {/* Insert Row Below */}
+              <button
+                onClick={() => handleToolbarInsertRow("below", false)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-100/70 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                title="Insert new row below current selection"
+              >
+                <PlusIcon className="w-3.5 h-3.5 text-emerald-600" />
+                + Row Below
+              </button>
+
+              {/* Insert Merged Row */}
+              <button
+                onClick={() => handleToolbarInsertRow("below", true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 border border-indigo-300 text-indigo-900 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                title="Insert a new Merged & Centered heading row"
+              >
+                <span className="text-xs">➕🔀</span>
+                + Merged Row
+              </button>
+
+              {/* Add Custom Column */}
+              <button
+                onClick={() => setShowAddColumnModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-sky-300 text-sky-900 hover:bg-sky-100/70 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                title="Add a new custom column anywhere in quotation grid"
+              >
+                <PlusIcon className="w-3.5 h-3.5 text-sky-600" />
+                + Column
+              </button>
+
+              {/* Toggle Grouped Headers */}
+              <button
+                onClick={() => setShowGroupedHeaders(!showGroupedHeaders)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 border ${
+                  showGroupedHeaders 
+                    ? "bg-teal-600 text-white border-teal-700" 
+                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                }`}
+                title="Toggle Excel two-tier grouped category headers"
+              >
+                <span>📊</span>
+                {showGroupedHeaders ? "Grouped: ON" : "Group Headers"}
+              </button>
+
+              {/* Delete Selected Row */}
+              {selectedRowId && (
+                <button
+                  onClick={handleToolbarDeleteRow}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+                  title="Delete selected row"
+                >
+                  <TrashIcon className="w-3.5 h-3.5 text-red-600" />
+                  Delete Row
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Active Selection Details Bar */}
+          {selectedRowItem && (
+            <div className="mt-2.5 pt-2 border-t border-emerald-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-emerald-950 uppercase tracking-wider text-[10px]">Row Options:</span>
+                <button
+                  onClick={() => toggleMergeCenter(selectedRowType!, selectedRowId!)}
+                  className="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-lg font-bold text-[10px] transition-all"
+                >
+                  {selectedRowItem.isMerged ? "Split back to cells" : "Merge all cells & center"}
+                </button>
+                {selectedRowItem.isMerged && (
+                  <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
+                    <span className="text-[10px] font-bold text-slate-600">Align:</span>
+                    {(['left', 'center', 'right'] as const).map(align => (
+                      <button
+                        key={align}
+                        onClick={() => updateItemValue(selectedRowType!, selectedRowItemIndex, 'mergedAlign', align)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold capitalize ${
+                          (selectedRowItem.mergedAlign || 'center') === align ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {align}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 font-mono">Row ID: {selectedRowId.substring(0, 14)}</span>
+                <button
+                  onClick={() => { setSelectedRowId(null); setSelectedRowType(null); }}
+                  className="text-[10px] text-slate-600 hover:text-slate-900 underline"
+                >
+                  Deselect
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Main Table */}
+        <QuotationSpreadsheetGrid
+          items={items}
+          reinforcements={reinforcements}
+          hiddenCols={hiddenCols}
+          customColumns={customColumns}
+          selectedBrand={selectedBrand}
+          availableBrands={brandOptions.filter(b => b !== "All")}
+          builderTab={builderTab}
+          selectedRowId={selectedRowId}
+          selectedRowType={selectedRowType}
+          showGroupedHeaders={showGroupedHeaders}
+          totalVisibleCols={totalVisibleCols}
+          getGroupColSpan={getGroupColSpan}
+          calculateRowTotal={calculateRowTotal}
+          updateItemValue={updateItemValue}
+          updateCustomField={updateCustomField}
+          setSelectedRowId={setSelectedRowId}
+          setSelectedRowType={setSelectedRowType}
+          insertRow={insertRow}
+          toggleMergeCenter={toggleMergeCenter}
+          deleteRow={deleteRow}
+          toggleRowVisibility={toggleRowVisibility}
+          deleteCustomColumn={deleteCustomColumn}
+          addProfileRow={addProfileRow}
+          addReinforcementRow={addReinforcementRow}
+        />
 
         {/* Footer Totals */}
         <div className="flex justify-between items-end mt-4">
@@ -2157,7 +2338,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                </div>
                <div className="text-center pt-8">
                  <div className="w-full border-t border-black mt-8 pt-1 uppercase font-bold tracking-widest text-[9px]">Authorised Signature</div>
-                 <p className="text-[8px] font-bold text-slate-500 mt-1 uppercase">For {quotationMeta.companyName || "RAVIRAJA INDUSTRIES PRIVATE LIMITED"}</p>
+                 <p className="text-[8px] font-bold text-slate-500 mt-1 uppercase">For {quotationMeta.companyName || companySettings.name}</p>
                </div>
             </div>
           </div>
@@ -2344,7 +2525,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                       const hasLeft = !!brandData.logoUrl;
                       const hasRight = !!brandData.logoRightUrl;
                       const isSelected = designerBrand.toLowerCase() === brandName.toLowerCase();
-                      const isCore = brandName === "RAVIRAJA" || brandName === "REINFORCEMENT";
+                      
                       
                       return (
                         <div
@@ -2390,7 +2571,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                             <PencilIcon className="w-3 h-3" />
                           </button>
 
-                          {!isCore && (
+                          {true && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -2650,15 +2831,6 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                     <PlusIcon className="w-3.5 h-3.5" /> Add Brand
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={resetToCoreBrands}
-                  className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-800 transition-all shrink-0 cursor-pointer"
-                  title="Remove all non-company brands and keep RAVIRAJA & REINFORCEMENT"
-                >
-                  Keep Only Our Brands
-                </button>
               </div>
 
               {/* Brand List */}
@@ -2674,7 +2846,7 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                   </div>
                 ) : (
                   brandOptions.filter(b => b !== "All").map(brand => {
-                    const isCore = brand === "RAVIRAJA" || brand === "REINFORCEMENT";
+                    
                     const isEditing = editingBrandInModal === brand;
                     const itemCount = items.filter(it => it.brand === brand).length + reinforcements.filter(it => it.brand === brand).length;
                     const brandLogo = getBrandLogoData(brand);
@@ -2729,13 +2901,6 @@ export default function Quotation({ defaultBrand }: QuotationProps) {
                           ) : (
                             <div className="flex items-center gap-2.5">
                               <span className="font-black text-sm text-slate-900 dark:text-white">{brand}</span>
-                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                                isCore 
-                                  ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                              }`}>
-                                {isCore ? 'Our Core Brand' : 'Custom Brand'}
-                              </span>
                               {hasLogo && (
                                 <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                                   Logo Configured

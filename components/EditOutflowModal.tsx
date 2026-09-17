@@ -1,6 +1,6 @@
 
 import React from 'react';
 
-const DeprecatedComponent: React.FC = () => null;
+const DeprecatedComponent = () => null;
 
 export default DeprecatedComponent;

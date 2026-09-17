@@ -9,7 +9,7 @@ interface EditInflowModalProps {
   items: Item[];
 }
 
-const EditInflowModal: React.FC<EditInflowModalProps> = ({ isOpen, onClose, transaction, onUpdate, items }) => {
+const EditInflowModal = ({ isOpen, onClose, transaction, onUpdate, items }) => {
   const [formData, setFormData] = useState<Partial<InflowTransaction>>({});
   
   const modalRef = useRef<HTMLDivElement>(null);
@@ -76,6 +76,16 @@ const EditInflowModal: React.FC<EditInflowModalProps> = ({ isOpen, onClose, tran
                     <select id="itemId" name="itemId" value={formData.itemId || ''} onChange={handleChange} className={inputStyles} required>
                         {items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
+                    {formData.itemId && (() => {
+                        const selectedItem = items.find(i => i.id === formData.itemId);
+                        if (!selectedItem) return null;
+                        return (
+                            <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-900/50 flex justify-between items-center font-semibold">
+                                <span>Opening Balance: <strong>{Number(selectedItem.openingStock || 0).toLocaleString()} {selectedItem.uom}</strong></span>
+                                <span>Cost Price: <strong>₹{Number(selectedItem.costPrice || 0).toFixed(2)}</strong></span>
+                            </div>
+                        );
+                    })()}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

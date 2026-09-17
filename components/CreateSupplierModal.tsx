@@ -8,7 +8,7 @@ interface CreateSupplierModalProps {
     onSave: (supplier: Omit<Supplier, 'id' | 'createdAt'>) => void;
 }
 
-const CreateSupplierModal: React.FC<CreateSupplierModalProps> = ({ isOpen, onClose, onSave }) => {
+const CreateSupplierModal = ({ isOpen, onClose, onSave }) => {
     const getInitialState = () => ({
         name: '',
         contactPerson: '',

@@ -12,7 +12,7 @@ interface FormulasViewProps {
     onUseFormula: (formulaId: string) => void;
 }
 
-const FormulasView: React.FC<FormulasViewProps> = ({ items, formulas, addFormula, updateFormula, deleteFormula, onUseFormula }) => {
+const FormulasView = ({ items, formulas, addFormula, updateFormula, deleteFormula, onUseFormula }) => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
 
